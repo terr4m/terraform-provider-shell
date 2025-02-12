@@ -1,0 +1,27 @@
+---
+page_title: "{{.Name}} ({{.Type}}) - {{.ProviderName}}"
+subcategory: "Utility"
+description: |-
+{{ .Summary | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Type}}: `{{.Name}}`
+
+{{ .Description | trimspace }}
+
+{{ if .HasExample -}}
+## Example Usage
+
+{{tffile .ExampleFile }}
+{{- end }}
+
+## Signature
+
+{{ .FunctionSignatureMarkdown }}
+
+## Arguments
+
+{{ .FunctionArgumentsMarkdown }}
+{{ if .HasVariadic -}}
+{{ .FunctionVariadicArgumentMarkdown }}
+{{- end }}
