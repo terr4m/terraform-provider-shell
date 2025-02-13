@@ -53,7 +53,7 @@ func (d *ScriptResource) Metadata(ctx context.Context, req resource.MetadataRequ
 func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script resource allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading.",
+		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading.",
 		Attributes: map[string]schema.Attribute{
 			"interpreter": schema.ListAttribute{
 				Description:         "The interpreter to use for executing the commands; if not set the provider interpreter will be used.",

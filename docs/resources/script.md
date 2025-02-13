@@ -2,12 +2,12 @@
 page_title: "shell_script (Resource) - terraform-provider-shell"
 subcategory: ""
 description: |-
-  The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading.
+  The Shell script resource (shell_script) allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading.
 ---
 
-# `shell_script` (Resource)
+# shell_script (Resource)
 
-The _Shell_ script resource allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading.
+The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading.
 
 ## Example Usage
 
