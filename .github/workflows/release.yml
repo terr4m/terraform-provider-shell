@@ -55,6 +55,7 @@ jobs:
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@90a3faa9d0182683851fbfa97ca1a2cb983bfca3 # v6.2.1
+        id: goreleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
@@ -64,4 +65,4 @@ jobs:
       - name: Attest artifacts
         uses: actions/attest-build-provenance@520d128f165991a6c774bcb264f323e3d70747f4 # v2.2.0
         with:
-          subject-checksums: ./dist/checksums.txt
+          subject-checksums: ./dist/${{ github.event.repository.name }}_${{ fromJSON(steps.goreleaser.outputs.metadata).version }}_SHA256SUMS
