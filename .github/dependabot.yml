@@ -1,0 +1,34 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: deps
+    schedule:
+      interval: weekly
+    reviewers:
+      - terr4m/admins
+
+  - package-ecosystem: gomod
+    directory: /
+    groups:
+      gomod:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: deps
+    schedule:
+      interval: weekly
+    reviewers:
+      - terr4m/admins
