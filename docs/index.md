@@ -1,6 +1,6 @@
 ---
 page_title: "Shell Provider - terraform-provider-shell"
-subcategory: "Utility"
+subcategory: ""
 description: |-
   The Shell provider allows you to execute arbitrary shell scripts and parse their JSON output for use in your Terraform configurations. This is particularly useful for running scripts that interact with external APIs, or other systems that don't have a native Terraform provider, or for performing complex data transformations.
 ---
