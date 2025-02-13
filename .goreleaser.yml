@@ -63,7 +63,8 @@ signs:
     args:
       - sign-blob
       - --new-bundle-format
-      - --bundle="${signature}"
+      - --bundle
+      - "${signature}"
       - "${artifact}"
     artifacts: checksum
 
