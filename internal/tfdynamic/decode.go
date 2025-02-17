@@ -8,36 +8,36 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // Decode decodes an object into a Terraform attribute value.
-func Decode(ctx context.Context, obj any) (basetypes.DynamicValue, diag.Diagnostics) {
+func Decode(ctx context.Context, obj any) (types.Dynamic, diag.Diagnostics) {
 	if obj == nil {
-		return basetypes.NewDynamicNull(), nil
+		return types.DynamicNull(), nil
 	}
 
 	val, diags := decodeScalar(ctx, obj, path.Empty())
 	if diags.HasError() {
-		return basetypes.DynamicValue{}, diags
+		return types.Dynamic{}, diags
 	}
 
-	return basetypes.NewDynamicValue(val), diags
+	return types.DynamicValue(val), diags
 }
 
 // decodeScalar decodes a scalar value into a Terraform attribute value.
 func decodeScalar(ctx context.Context, a any, thisPath path.Path) (attr.Value, diag.Diagnostics) {
 	switch v := a.(type) {
 	case nil:
-		return basetypes.NewDynamicNull(), nil
+		return types.DynamicNull(), nil
 	case int64:
-		return basetypes.NewNumberValue(big.NewFloat(float64(v))), nil
+		return types.NumberValue(big.NewFloat(float64(v))), nil
 	case float64:
-		return basetypes.NewNumberValue(big.NewFloat(v)), nil
+		return types.NumberValue(big.NewFloat(v)), nil
 	case bool:
-		return basetypes.NewBoolValue(v), nil
+		return types.BoolValue(v), nil
 	case string:
-		return basetypes.NewStringValue(v), nil
+		return types.StringValue(v), nil
 	case []any:
 		return decodeSequence(ctx, v, thisPath)
 	case map[string]any:
@@ -66,7 +66,7 @@ func decodeMapping(ctx context.Context, m map[string]any, thisPath path.Path) (a
 		tm[k] = vv.Type(ctx)
 	}
 
-	return basetypes.NewObjectValue(tm, vm)
+	return types.ObjectValue(tm, vm)
 }
 
 // decodeSequence decodes a sequence value into a Terraform attribute value.
@@ -85,5 +85,5 @@ func decodeSequence(ctx context.Context, s []any, thisPath path.Path) (attr.Valu
 		tl[i] = vv.Type(ctx)
 	}
 
-	return basetypes.NewTupleValue(tl, vl)
+	return types.TupleValue(tl, vl)
 }

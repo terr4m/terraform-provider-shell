@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -97,6 +98,55 @@ func TestAccScriptDataSource(t *testing.T) {
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(3)),
 					},
+				},
+			},
+		})
+	})
+
+	t.Run("read_with_timeout", func(t *testing.T) {
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `data "shell_script" "test" {
+  command = <<-EOF
+    set -euo pipefail
+		sleep 5s
+    printf '{"success": true}\n' > "$${TF_SCRIPT_OUTPUT}"
+  EOF
+
+  timeouts = {
+    read = "10s"
+  }
+}`,
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"success": knownvalue.Bool(true)})),
+					},
+				},
+			},
+		})
+	})
+
+	t.Run("read_with_timeout_error", func(t *testing.T) {
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `data "shell_script" "test" {
+  command = <<-EOF
+    set -euo pipefail
+		sleep 30s
+    printf '{"success": true}\n' > "$${TF_SCRIPT_OUTPUT}"
+  EOF
+
+  timeouts = {
+    read = "10s"
+  }
+}`,
+
+					ExpectError: regexp.MustCompile(".+"),
 				},
 			},
 		})
