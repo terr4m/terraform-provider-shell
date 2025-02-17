@@ -35,8 +35,16 @@ data "shell_script" "example" {
 
 - `environment` (Map of String) The environment variables to set when executing command; to be combined with the OS environment and the provider environment.
 - `interpreter` (List of String) The interpreter to use for executing the command; if not set the provider interpreter will be used.
+- `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 - `working_directory` (String) The working directory to use when executing the command; this will default to the _Terraform_ working directory..
 
 ### Read-Only
 
 - `output` (Dynamic) The output of the script as a structured type.
+
+<a id="nestedatt--timeouts"></a>
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `read` (String) Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).

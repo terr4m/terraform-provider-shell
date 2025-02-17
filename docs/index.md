@@ -46,3 +46,14 @@ resource "shell_script" "example" {
 - `environment` (Map of String) The environment variables to set when executing scripts.
 - `interpreter` (List of String) The interpreter to use for executing scripts if not provided by the resource or data source. This defaults to `["/bin/bash", "-c"]` or `["pwsh", "-c"]` on Windows.
 - `log_output` (Boolean) If `true`, lines output by the script will be logged at the appropriate level if they start with the `[<LEVEL>]` pattern where `<LEVEL>` can be one of `ERROR`, `WARN`, `INFO`, `DEBUG` & `TRACE`.
+- `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
+
+<a id="nestedatt--timeouts"></a>
+### Nested Schema for `timeouts`
+
+Optional:
+
+- `create` (String) Timeout for resource creation; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `delete` (String) Timeout for resource deletion; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `read` (String) Timeout for resource or data source reads; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `update` (String) Timeout for resource update; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).

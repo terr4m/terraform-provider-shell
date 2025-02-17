@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"runtime"
+	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -30,18 +32,28 @@ func New(version, commit string) func() provider.Provider {
 
 // ShellProviderData is the data available to the resource and data sources.
 type ShellProviderData struct {
-	provider    *ShellProvider
-	Model       *ShellProviderModel
-	Interpreter []string
-	Environment map[string]string
-	LogOutput   bool
+	provider        *ShellProvider
+	Model           *ShellProviderModel
+	Interpreter     []string
+	Environment     map[string]string
+	LogOutput       bool
+	DefaultTimeouts *Timeouts
+}
+
+// Timeouts represents a set of timeouts.
+type Timeouts struct {
+	Create time.Duration
+	Read   time.Duration
+	Update time.Duration
+	Delete time.Duration
 }
 
 // ShellProviderModel describes the provider data model.
 type ShellProviderModel struct {
-	Interpreter types.List `tfsdk:"interpreter"`
-	Environment types.Map  `tfsdk:"environment"`
-	LogOutput   types.Bool `tfsdk:"log_output"`
+	Interpreter types.List     `tfsdk:"interpreter"`
+	Environment types.Map      `tfsdk:"environment"`
+	LogOutput   types.Bool     `tfsdk:"log_output"`
+	Timeouts    timeouts.Value `tfsdk:"timeouts"`
 }
 
 // ShellProvider defines the provider implementation.
@@ -61,7 +73,7 @@ func (p *ShellProvider) Schema(ctx context.Context, req provider.SchemaRequest, 
 		MarkdownDescription: "The _Shell_ provider allows you to execute arbitrary shell scripts and parse their JSON output for use in your _Terraform_ configurations. This is particularly useful for running scripts that interact with external APIs, or other systems that don't have a native _Terraform_ provider, or for performing complex data transformations.",
 		Attributes: map[string]schema.Attribute{
 			"interpreter": schema.ListAttribute{
-				Description:         "The interpreter to use for executing scripts if not provided by the resource or data source.",
+				Description:         "The interpreter to use for executing scripts if not provided by the resource or data source. This defaults to [\"/bin/bash\", \"-c\"` or [\"pwsh\", \"-c\"` on Windows.",
 				MarkdownDescription: "The interpreter to use for executing scripts if not provided by the resource or data source. This defaults to `[\"/bin/bash\", \"-c\"]` or `[\"pwsh\", \"-c\"]` on Windows.",
 				ElementType:         types.StringType,
 				Optional:            true,
@@ -80,6 +92,16 @@ func (p *ShellProvider) Schema(ctx context.Context, req provider.SchemaRequest, 
 				MarkdownDescription: "If `true`, lines output by the script will be logged at the appropriate level if they start with the `[<LEVEL>]` pattern where `<LEVEL>` can be one of `ERROR`, `WARN`, `INFO`, `DEBUG` & `TRACE`.",
 				Optional:            true,
 			},
+			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+				Create:            true,
+				CreateDescription: "Timeout for resource creation; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				Read:              true,
+				ReadDescription:   "Timeout for resource or data source reads; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				Update:            true,
+				UpdateDescription: "Timeout for resource update; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				Delete:            true,
+				DeleteDescription: "Timeout for resource deletion; defaults to `10m`. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+			}),
 		},
 	}
 }
@@ -120,6 +142,24 @@ func (p *ShellProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		}
 	}
 
+	// Lookup timeouts
+	createTimeout, diags := model.Timeouts.Create(ctx, 10*time.Minute)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+	readTimeout, diags := model.Timeouts.Read(ctx, 10*time.Minute)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+	updateTimeout, diags := model.Timeouts.Update(ctx, 10*time.Minute)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+	deleteTimeout, diags := model.Timeouts.Delete(ctx, 10*time.Minute)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
 	// Configure provider data
 	providerData := &ShellProviderData{
 		provider:    p,
@@ -127,6 +167,12 @@ func (p *ShellProvider) Configure(ctx context.Context, req provider.ConfigureReq
 		Interpreter: interpreter,
 		Environment: environment,
 		LogOutput:   model.LogOutput.ValueBool(),
+		DefaultTimeouts: &Timeouts{
+			Create: createTimeout,
+			Read:   readTimeout,
+			Update: updateTimeout,
+			Delete: deleteTimeout,
+		},
 	}
 
 	resp.DataSourceData = providerData
