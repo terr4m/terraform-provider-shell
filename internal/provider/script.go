@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -29,11 +30,12 @@ type ScriptResource struct {
 
 // ScriptResourceModel describes the resource data model.
 type ScriptResourceModel struct {
-	Interpreter      types.List    `tfsdk:"interpreter"`
-	Environment      types.Map     `tfsdk:"environment"`
-	WorkingDirectory types.String  `tfsdk:"working_directory"`
-	Commands         *ScriptsModel `tfsdk:"commands"`
-	Output           types.Dynamic `tfsdk:"output"`
+	Interpreter      types.List     `tfsdk:"interpreter"`
+	Environment      types.Map      `tfsdk:"environment"`
+	WorkingDirectory types.String   `tfsdk:"working_directory"`
+	Commands         *ScriptsModel  `tfsdk:"commands"`
+	Output           types.Dynamic  `tfsdk:"output"`
+	Timeouts         timeouts.Value `tfsdk:"timeouts"`
 }
 
 // ScriptsModel describes the scripts data model.
@@ -103,6 +105,16 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The output of the script as a structured type.",
 				Computed:            true,
 			},
+			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+				Create:            true,
+				CreateDescription: "Timeout for creating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				Read:              true,
+				ReadDescription:   "Timeout for reading the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				Update:            true,
+				UpdateDescription: "Timeout for updating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				Delete:            true,
+				DeleteDescription: "Timeout for deleting the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+			}),
 		},
 	}
 }
@@ -129,6 +141,14 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	timeout, diags := data.Timeouts.Create(ctx, r.providerData.DefaultTimeouts.Create)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Create, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
@@ -150,6 +170,14 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 	if resp.Diagnostics.Append(req.State.Get(ctx, &data)...); resp.Diagnostics.HasError() {
 		return
 	}
+
+	timeout, diags := data.Timeouts.Read(ctx, r.providerData.DefaultTimeouts.Read)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Read, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
@@ -173,6 +201,14 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	timeout, diags := data.Timeouts.Update(ctx, r.providerData.DefaultTimeouts.Update)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Update, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
@@ -195,7 +231,15 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
-	_, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Delete, false)
+	timeout, diags := data.Timeouts.Delete(ctx, r.providerData.DefaultTimeouts.Delete)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	_, diags = runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Delete, false)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
