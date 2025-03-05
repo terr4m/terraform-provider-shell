@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -27,11 +28,12 @@ type ScriptDataSource struct {
 
 // ScriptDataSourceModel describes the data source data model.
 type ScriptDataSourceModel struct {
-	Interpreter      types.List    `tfsdk:"interpreter"`
-	Environment      types.Map     `tfsdk:"environment"`
-	WorkingDirectory types.String  `tfsdk:"working_directory"`
-	Command          types.String  `tfsdk:"command"`
-	Output           types.Dynamic `tfsdk:"output"`
+	Interpreter      types.List     `tfsdk:"interpreter"`
+	Environment      types.Map      `tfsdk:"environment"`
+	WorkingDirectory types.String   `tfsdk:"working_directory"`
+	Command          types.String   `tfsdk:"command"`
+	Output           types.Dynamic  `tfsdk:"output"`
+	Timeouts         timeouts.Value `tfsdk:"timeouts"`
 }
 
 // Metadata returns the data source metadata.
@@ -75,6 +77,10 @@ func (d *ScriptDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				MarkdownDescription: "The output of the script as a structured type.",
 				Computed:            true,
 			},
+			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
+				Read:            true,
+				ReadDescription: "Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+			}),
 		},
 	}
 }
@@ -100,6 +106,14 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	if resp.Diagnostics.Append(req.Config.Get(ctx, &data)...); resp.Diagnostics.HasError() {
 		return
 	}
+
+	timeout, diags := data.Timeouts.Read(ctx, d.providerData.DefaultTimeouts.Read)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	raw, diags := runCommand(ctx, d.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Command, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
