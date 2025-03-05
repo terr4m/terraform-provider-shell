@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -11,10 +12,11 @@ import (
 
 const (
 	ScriptOutPutFilePathEnv string = "TF_SCRIPT_OUTPUT"
+	StateOutputEnv          string = "TF_STATE_OUTPUT"
 )
 
 // runCommand runs a shell script and returns the output.
-func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, readJSON bool) (any, diag.Diagnostics) {
+func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, stateOutput any, readJSON bool) (any, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	var interpreter []string
@@ -45,6 +47,16 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 	defer os.Remove(outFilePath)
 
 	environment[ScriptOutPutFilePathEnv] = outFilePath
+
+	if stateOutput != nil {
+		by, err := json.Marshal(stateOutput)
+		if err != nil {
+			diags.AddError("Failed to marshal state output.", err.Error())
+			return nil, diags
+		}
+
+		environment[StateOutputEnv] = string(by)
+	}
 
 	var log *tflogLogger
 	if providerData.LogOutput {

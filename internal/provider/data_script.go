@@ -115,7 +115,7 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, d.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Command, true)
+	raw, diags := runCommand(ctx, d.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Command, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
