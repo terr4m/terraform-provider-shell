@@ -55,7 +55,7 @@ func (d *ScriptResource) Metadata(ctx context.Context, req resource.MetadataRequ
 func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading.",
+		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the `TF_STATE_OUTPUT` environment variable.",
 		Attributes: map[string]schema.Attribute{
 			"interpreter": schema.ListAttribute{
 				Description:         "The interpreter to use for executing the commands; if not set the provider interpreter will be used.",
@@ -149,7 +149,7 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Create, true)
+	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Create, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -176,10 +176,21 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
+	var stateData ScriptResourceModel
+	if resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	stateOutput, err := tfdynamic.EncodeDynamic(ctx, stateData.Output)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the state output.", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Read, true)
+	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Read, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -206,10 +217,21 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	var stateData ScriptResourceModel
+	if resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	stateOutput, err := tfdynamic.EncodeDynamic(ctx, stateData.Output)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the state output.", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Update, true)
+	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Update, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -236,10 +258,21 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
+	var stateData ScriptResourceModel
+	if resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	stateOutput, err := tfdynamic.EncodeDynamic(ctx, stateData.Output)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the state output.", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	_, diags = runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Delete, false)
+	_, diags = runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Delete, stateOutput, false)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}

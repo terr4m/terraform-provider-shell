@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -46,8 +47,7 @@ func TestAccScriptResource(t *testing.T) {
   }
 }`,
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output").AtMapKey("exists"), knownvalue.Bool(true)),
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"exists": knownvalue.Bool(true)})),
 					},
 				},
 			},
@@ -93,9 +93,7 @@ func TestAccScriptResource(t *testing.T) {
   }
 }`,
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output").AtMapKey("exists"), knownvalue.Bool(true)),
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output").AtMapKey("path"), knownvalue.StringExact("/tmp/tf-script-test")),
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"path": knownvalue.StringExact("/tmp/tf-script-test"), "exists": knownvalue.Bool(true)})),
 					},
 				},
 				{
@@ -137,9 +135,49 @@ func TestAccScriptResource(t *testing.T) {
   }
 }`,
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output").AtMapKey("exists"), knownvalue.Bool(true)),
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output").AtMapKey("path"), knownvalue.StringExact("/tmp/tf-script-test-new")),
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"path": knownvalue.StringExact("/tmp/tf-script-test-new"), "exists": knownvalue.Bool(true)})),
+					},
+				},
+			},
+		})
+	})
+
+	t.Run("create_with_state", func(t *testing.T) {
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `resource "shell_script" "test" {
+  commands = {
+    create = <<-EOF
+      set -euo pipefail
+			file="$(mktemp)"
+      touch "$${file}"
+      printf '{"path": "%s","exists": true}' "$${file}" > "$${TF_SCRIPT_OUTPUT}"
+    EOF
+    read = <<-EOF
+      set -euo pipefail
+			file="$(echo "$${TF_STATE_OUTPUT}" | jq -r '.path')"
+      if [[ -f "$${file}" ]]; then
+        printf '{"path": "%s","exists": true}' "$${file}" > "$${TF_SCRIPT_OUTPUT}"
+      else
+        printf '{"path": "%s","exists": true}' "$${file}" > "$${TF_SCRIPT_OUTPUT}"
+      fi
+    EOF
+    update = <<-EOF
+      set -euo pipefail
+      printf '%s' "$${TF_STATE_OUTPUT}" > "$${TF_SCRIPT_OUTPUT}"
+    EOF
+    delete = <<-EOF
+      set -euo pipefail
+			file="$(echo "$${TF_STATE_OUTPUT}" | jq -r '.path')"
+      rm -f "$${file}"
+    EOF
+  }
+}`,
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"path": knownvalue.StringRegexp(regexp.MustCompile(".+")), "exists": knownvalue.Bool(true)})),
 					},
 				},
 			},
