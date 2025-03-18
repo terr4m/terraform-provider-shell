@@ -34,7 +34,7 @@ archives:
 
 sboms:
   - id: default
-    artifacts: archive
+    artifacts: source
 
 checksum:
   extra_files:
