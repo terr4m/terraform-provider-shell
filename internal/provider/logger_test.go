@@ -1,14 +1,13 @@
 package provider
 
 import (
-	"context"
 	"testing"
 )
 
 func Test_tflogLogger(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	logger := tflogLogger{}
 	logger.Error(ctx, "error")

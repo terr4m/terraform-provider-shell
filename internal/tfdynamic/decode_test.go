@@ -1,7 +1,6 @@
 package tfdynamic
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"testing"
@@ -89,7 +88,7 @@ func TestDecode(t *testing.T) {
 		t.Run(d.testName, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := t.Context()
 
 			dyn, diags := Decode(ctx, d.obj)
 

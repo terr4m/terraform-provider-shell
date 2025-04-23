@@ -1,7 +1,6 @@
 package tfdynamic
 
 import (
-	"context"
 	"reflect"
 	"testing"
 
@@ -42,7 +41,7 @@ func TestEncodeDynamicObject(t *testing.T) {
 		t.Run(d.testName, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := t.Context()
 
 			actual, err := EncodeDynamic(ctx, d.dyn)
 
