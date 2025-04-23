@@ -183,7 +183,7 @@ func TestRunCommand(t *testing.T) {
 				t.Skip("Test is not valid on Windows")
 			}
 
-			ctx := context.Background()
+			ctx := t.Context()
 			err := RunCommand(ctx, d.interpreter, d.env, d.dir, d.command, d.logger)
 
 			hasErr := err != nil

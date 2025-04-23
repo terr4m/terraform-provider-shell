@@ -1,8 +1,6 @@
 module github.com/terr4m/terraform-provider-shell
 
-go 1.23.0
-
-toolchain go1.23.5
+go 1.24
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.14.1
