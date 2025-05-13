@@ -14,8 +14,6 @@ updates:
       prefix: deps
     schedule:
       interval: weekly
-    reviewers:
-      - terr4m/admins
 
   - package-ecosystem: gomod
     directory: /
@@ -30,5 +28,3 @@ updates:
       prefix: deps
     schedule:
       interval: weekly
-    reviewers:
-      - terr4m/admins
