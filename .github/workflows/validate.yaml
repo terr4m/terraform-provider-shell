@@ -97,7 +97,6 @@ jobs:
         shell: bash
     outputs:
       tf_versions: ${{ steps.setup.outputs.tf_versions }}
-      k8s_versions: ${{ steps.setup.outputs.k8s_versions }}
     steps:
       - name: Setup
         id: setup
