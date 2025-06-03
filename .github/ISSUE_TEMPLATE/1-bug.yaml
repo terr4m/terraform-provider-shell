@@ -1,0 +1,89 @@
+name: Report Bug
+description: Open an issue to report a bug in the provider.
+# title: ""
+type: Bug
+labels: ["status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: dropdown
+    id: tool
+    attributes:
+      label: TF Tool
+      description: Which TF tool are you using?
+      options:
+        - Terraform
+        - OpenTofu
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: tf_version
+    attributes:
+      label: Terraform/OpenTofu Version
+      description: What version of Terraform or OpenTofu are you running?
+      placeholder: ex. 1.5.0
+    validations:
+      required: true
+  - type: input
+    id: provider_version
+    attributes:
+      label: Provider Version
+      description: What version of the provider are you using?
+      placeholder: ex. 1.0.0
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed Behavior
+      description: What happened?
+      placeholder: Tell us what you see!
+      value: "A bug happened!"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Tell us what you expected!
+      value: "I expected..."
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: TF Configuration
+      description: Please provide the relevant TF configuration that reproduces the issue. This will be automatically formatted into code, so no need for backticks.
+      render: hcl
+      placeholder: |
+        resource "shell_script" "example" {
+          commands = {}
+        }
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Please provide detailed steps to reproduce the issue.
+      placeholder: |
+        1. Run `terraform apply`
+        2. See error
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/terr4m/.github/blob/main/CODE_OF_CONDUCT.md).
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
