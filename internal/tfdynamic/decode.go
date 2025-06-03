@@ -7,7 +7,6 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -17,7 +16,7 @@ func Decode(ctx context.Context, obj any) (types.Dynamic, diag.Diagnostics) {
 		return types.DynamicNull(), nil
 	}
 
-	val, diags := decodeScalar(ctx, obj, path.Empty())
+	val, diags := decodeScalar(ctx, obj)
 	if diags.HasError() {
 		return types.Dynamic{}, diags
 	}
@@ -26,7 +25,7 @@ func Decode(ctx context.Context, obj any) (types.Dynamic, diag.Diagnostics) {
 }
 
 // decodeScalar decodes a scalar value into a Terraform attribute value.
-func decodeScalar(ctx context.Context, a any, thisPath path.Path) (attr.Value, diag.Diagnostics) {
+func decodeScalar(ctx context.Context, a any) (attr.Value, diag.Diagnostics) {
 	switch v := a.(type) {
 	case nil:
 		return types.DynamicNull(), nil
@@ -39,9 +38,9 @@ func decodeScalar(ctx context.Context, a any, thisPath path.Path) (attr.Value, d
 	case string:
 		return types.StringValue(v), nil
 	case []any:
-		return decodeSequence(ctx, v, thisPath)
+		return decodeSequence(ctx, v)
 	case map[string]any:
-		return decodeMapping(ctx, v, thisPath)
+		return decodeMapping(ctx, v)
 	default:
 		diagnostics := diag.Diagnostics{}
 		diagnostics.AddError("Unexpected type.", fmt.Sprintf("unexpected type: %T for value %#v", v, v))
@@ -50,14 +49,13 @@ func decodeScalar(ctx context.Context, a any, thisPath path.Path) (attr.Value, d
 }
 
 // decodeMapping decodes a mapping value into a Terraform attribute value.
-func decodeMapping(ctx context.Context, m map[string]any, thisPath path.Path) (attr.Value, diag.Diagnostics) {
+func decodeMapping(ctx context.Context, m map[string]any) (attr.Value, diag.Diagnostics) {
 	l := len(m)
 	vm := make(map[string]attr.Value, l)
 	tm := make(map[string]attr.Type, l)
 
 	for k, v := range m {
-		p := thisPath.AtName(k)
-		vv, diags := decodeScalar(ctx, v, p)
+		vv, diags := decodeScalar(ctx, v)
 		if diags.HasError() {
 			return nil, diags
 		}
@@ -70,14 +68,13 @@ func decodeMapping(ctx context.Context, m map[string]any, thisPath path.Path) (a
 }
 
 // decodeSequence decodes a sequence value into a Terraform attribute value.
-func decodeSequence(ctx context.Context, s []any, thisPath path.Path) (attr.Value, diag.Diagnostics) {
+func decodeSequence(ctx context.Context, s []any) (attr.Value, diag.Diagnostics) {
 	l := len(s)
 	vl := make([]attr.Value, l)
 	tl := make([]attr.Type, l)
 
 	for i, v := range s {
-		p := thisPath.AtListIndex(i)
-		vv, err := decodeScalar(ctx, v, p)
+		vv, err := decodeScalar(ctx, v)
 		if err != nil {
 			return nil, err
 		}

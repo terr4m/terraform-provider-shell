@@ -11,3 +11,8 @@ N/A
 - Follow idiomatic Go coding standards.
 - Prefer table tests over sub-tests.
 - Use [google/go-cmp](https://github.com/google/go-cmp) for test comparisons.
+
+## Source Control
+
+- Use conventional commits for commit messages.
+- Use the `main` branch as the default branch.

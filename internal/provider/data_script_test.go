@@ -2,6 +2,7 @@ package provider
 
 import (
 	"regexp"
+	"runtime"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -17,15 +18,76 @@ func TestAccScriptDataSource(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: `data "shell_script" "test" {
-  command = <<-EOF
-    set -euo pipefail
-    curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
-  EOF
-}`,
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
+          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First 4
+          $latest = $sorted | ForEach-Object { $_.latest }
+          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
+}
+`,
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(4)),
+					},
+				},
+			},
+		})
+	})
+
+	t.Run("read_os_script", func(t *testing.T) {
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          exit 1
+        EOF
+      }
+    }
+    linux = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          printf '{"os": "linux"}\n' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          '{"os": "windows"}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
+}
+`,
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"os": knownvalue.StringExact(runtime.GOOS)})),
 					},
 				},
 			},
@@ -38,14 +100,34 @@ func TestAccScriptDataSource(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: `data "shell_script" "test" {
-  command = <<-EOF
-    set -euo pipefail
-    echo "Test..."
-    echo "Test..." >&2
-    curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
-  EOF
-}`,
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          echo "Test..."
+          echo "Test..." >&2
+          curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          Write-Host "Test..."
+					Write-Error "Test..."
+          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
+          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First 4
+          $latest = $sorted | ForEach-Object { $_.latest }
+          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
+}
+`,
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(4)),
@@ -61,13 +143,32 @@ func TestAccScriptDataSource(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: `data "shell_script" "test" {
-  interpreter = ["/bin/sh", "-c"]
-  command = <<-EOF
-    set -eu
-    curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
-  EOF
-}`,
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        interpreter = ["/bin/bash", "-c"]
+        command = <<-EOF
+          set -euo pipefail
+          curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        interpreter = ["pwsh", "-c"]
+        command = <<-EOF
+          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
+          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First 4
+          $latest = $sorted | ForEach-Object { $_.latest }
+          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
+}
+`,
 
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
@@ -84,15 +185,33 @@ func TestAccScriptDataSource(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: `data "shell_script" "test" {
+					Config: `
+data "shell_script" "test" {
   environment = {
     "TF_VERSION_COUNT" = "3"
   }
-  command = <<-EOF
-    set -euo pipefail
-    curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${TF_VERSION_COUNT}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
-  EOF
-}`,
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${TF_VERSION_COUNT}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
+          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First $env:TF_VERSION_COUNT
+          $latest = $sorted | ForEach-Object { $_.latest }
+          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
+}
+`,
 
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
@@ -109,17 +228,32 @@ func TestAccScriptDataSource(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: `data "shell_script" "test" {
-  command = <<-EOF
-    set -euo pipefail
-		sleep 5s
-    printf '{"success": true}\n' > "$${TF_SCRIPT_OUTPUT}"
-  EOF
-
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          sleep 1s
+          printf '{"success": true}\n' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          Start-Sleep -Seconds 1
+          '{"success": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
   timeouts = {
     read = "10s"
   }
-}`,
+}
+`,
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"success": knownvalue.Bool(true)})),
 					},
@@ -134,18 +268,32 @@ func TestAccScriptDataSource(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: `data "shell_script" "test" {
-  command = <<-EOF
-    set -euo pipefail
-		sleep 30s
-    printf '{"success": true}\n' > "$${TF_SCRIPT_OUTPUT}"
-  EOF
-
-  timeouts = {
-    read = "10s"
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          sleep 10s
+          printf '{"success": true}\n' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          Start-Sleep -Seconds 10
+          '{"success": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
   }
-}`,
-
+  timeouts = {
+    read = "1s"
+  }
+}
+`,
 					ExpectError: regexp.MustCompile(".+"),
 				},
 			},

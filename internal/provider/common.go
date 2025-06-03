@@ -12,11 +12,21 @@ import (
 
 const (
 	ScriptOutPutFilePathEnv string = "TF_SCRIPT_OUTPUT"
-	StateOutputEnv          string = "TF_STATE_OUTPUT"
+	StateOutputEnv          string = "TF_SCRIPT_STATE_OUTPUT"
+	LifecycleEnv            string = "TF_SCRIPT_LIFECYCLE"
+)
+
+type TFLifecycle string
+
+const (
+	TFLifecycleCreate TFLifecycle = "create"
+	TFLifecycleRead   TFLifecycle = "read"
+	TFLifecycleUpdate TFLifecycle = "update"
+	TFLifecycleDelete TFLifecycle = "delete"
 )
 
 // runCommand runs a shell script and returns the output.
-func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, stateOutput any, readJSON bool) (any, diag.Diagnostics) {
+func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, lifecycle TFLifecycle, stateOutput any, readJSON bool) (any, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	var interpreter []string
@@ -25,7 +35,7 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 			return nil, diags
 		}
 	} else {
-		interpreter = providerData.Interpreter
+		interpreter = providerData.DefaultInterpreter
 	}
 
 	environment := map[string]string{}
@@ -46,6 +56,7 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 	}
 	defer os.Remove(outFilePath)
 
+	environment[LifecycleEnv] = string(lifecycle)
 	environment[ScriptOutPutFilePathEnv] = outFilePath
 
 	if stateOutput != nil {
