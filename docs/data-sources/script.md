@@ -17,10 +17,26 @@ data "shell_script" "example" {
     "TF_VERSION_COUNT" = "3"
   }
 
-  command = <<-EOF
-    set -euo pipefail
-    curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${TF_VERSION_COUNT}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
-  EOF
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${TF_VERSION_COUNT}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
+          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First $env:TF_VERSION_COUNT
+          $latest = $sorted | ForEach-Object { $_.latest }
+          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
 }
 ```
 
@@ -29,12 +45,11 @@ data "shell_script" "example" {
 
 ### Required
 
-- `command` (String) The command to run when reading the data source; this must write a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable.
+- `os_commands` (Attributes Map) A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided. (see [below for nested schema](#nestedatt--os_commands))
 
 ### Optional
 
 - `environment` (Map of String) The environment variables to set when executing command; to be combined with the OS environment and the provider environment.
-- `interpreter` (List of String) The interpreter to use for executing the command; if not set the provider interpreter will be used.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 - `working_directory` (String) The working directory to use when executing the command; this will default to the _Terraform_ working directory..
 
@@ -42,9 +57,29 @@ data "shell_script" "example" {
 
 - `output` (Dynamic) The output of the script as a structured type.
 
+<a id="nestedatt--os_commands"></a>
+### Nested Schema for `os_commands`
+
+Required:
+
+- `read` (Attributes) The read command configuration. (see [below for nested schema](#nestedatt--os_commands--read))
+
+<a id="nestedatt--os_commands--read"></a>
+### Nested Schema for `os_commands.read`
+
+Required:
+
+- `command` (String) The read command to execute.
+
+Optional:
+
+- `interpreter` (List of String) The interpreter to use for executing the read command; if not set the platform default interpreter will be used.
+
+
+
 <a id="nestedatt--timeouts"></a>
 ### Nested Schema for `timeouts`
 
 Optional:
 
-- `read` (String) Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `read` (String) Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).

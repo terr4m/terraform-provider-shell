@@ -2,55 +2,84 @@
 page_title: "shell_script (Resource) - terraform-provider-shell"
 subcategory: ""
 description: |-
-  The Shell script resource (shell_script) allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the TF_STATE_OUTPUT environment variable.
+  The Shell script resource (shell_script) allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the TF_SCRIPT_STATE_OUTPUT environment variable.
 ---
 
 # shell_script (Resource)
 
-The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the `TF_STATE_OUTPUT` environment variable.
+The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable.
 
 ## Example Usage
 
 ```terraform
 resource "shell_script" "example" {
-  environment = {
-    "OLD_TARGET_FILE" = "my-resource"
-    "TARGET_FILE"     = "my-resource-new"
-  }
-
-  commands = {
-    create = <<-EOF
-      set -euo pipefail
-      path="/tmp/$${TARGET_FILE}"
-      touch "$${path}"
-      printf '{"exists": true, "path": "%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-    EOF
-
-    read = <<-EOF
-      set -euo pipefail
-      path="/tmp/$${TARGET_FILE}"
-      if [[ -f "$${path}" ]]; then
-        printf '{"exists": true, "path": "%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-      else
-        printf '{"exists": false, "path": "%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-      fi
-    EOF
-
-    update = <<-EOF
-      set -euo pipefail
-      old_path="/tmp/$${OLD_TARGET_FILE}"
-      if [[ -f "$${old_path}" ]]; then
-        rm -f "$${old_path}"
-      fi
-      path="/tmp/$${TARGET_FILE}"
-      touch "$${path}"
-      printf '{"exists": true,"path":"%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-    EOF
-
-    delete = <<-EOF
-      set -euo pipefail
-      rm -f "/tmp/$${TARGET_FILE}"
-    EOF
+  os_commands = {
+    default = {
+      create = {
+        command = <<-EOF
+          set -euo pipefail
+          file="$(mktemp)"
+          touch "$${file}"
+          printf '{"path": "%s","exists": true}' "$${file}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          file="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
+          if [[ -f "$${file}" ]]; then
+            printf '{"path": "%s","exists": true}' "$${file}" > "$${TF_SCRIPT_OUTPUT}"
+          else
+            printf '{"path": "%s","exists": false}' "$${file}" > "$${TF_SCRIPT_OUTPUT}"
+          fi
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          set -euo pipefail
+          printf '%s' "$${TF_SCRIPT_STATE_OUTPUT}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      delete = {
+        command = <<-EOF
+          set -euo pipefail
+          file="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
+          rm -f "$${file}"
+        EOF
+      }
+    }
+    windows = {
+      create = {
+        command = <<-EOF
+          $file = [System.IO.Path]::GetTempFileName()
+          New-Item -Path $file -ItemType File -Force
+          @{path=$file; exists=$true} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
+          $file = $state.path
+          if (Test-Path $file) {
+            @{path=$file; exists=$true} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          } else {
+            @{path=$file; exists=$false} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          }
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          $env:TF_SCRIPT_STATE_OUTPUT | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      delete = {
+        command = <<-EOF
+          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
+          $file = $state.path
+          Remove-Item -Path $file -Force -ErrorAction SilentlyContinue
+        EOF
+      }
+    }
   }
 }
 ```
@@ -60,28 +89,75 @@ resource "shell_script" "example" {
 
 ### Required
 
-- `commands` (Attributes) The commands to run as part of the _Terraform_ lifecycle. All commands must write a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable. (see [below for nested schema](#nestedatt--commands))
+- `os_commands` (Attributes Map) A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided. (see [below for nested schema](#nestedatt--os_commands))
 
 ### Optional
 
 - `environment` (Map of String) The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.
-- `interpreter` (List of String) The interpreter to use for executing the commands; if not set the provider interpreter will be used.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
-- `working_directory` (String) The working directory to use when executing the commands; this will default to the _Terraform_ working directory..
+- `working_directory` (String) The working directory to use when executing the commands; this will default to the _Terraform_ working directory.
 
 ### Read-Only
 
 - `output` (Dynamic) The output of the script as a structured type.
 
-<a id="nestedatt--commands"></a>
-### Nested Schema for `commands`
+<a id="nestedatt--os_commands"></a>
+### Nested Schema for `os_commands`
 
 Required:
 
-- `create` (String) The command to execute when creating the resource.
-- `delete` (String) The command to execute when deleting the resource.
-- `read` (String) The command to execute when reading the resource.
-- `update` (String) The command to execute when updating the resource.
+- `create` (Attributes) The create command configuration. (see [below for nested schema](#nestedatt--os_commands--create))
+- `delete` (Attributes) The delete command configuration. (see [below for nested schema](#nestedatt--os_commands--delete))
+- `read` (Attributes) The read command configuration. (see [below for nested schema](#nestedatt--os_commands--read))
+- `update` (Attributes) The update command configuration. (see [below for nested schema](#nestedatt--os_commands--update))
+
+<a id="nestedatt--os_commands--create"></a>
+### Nested Schema for `os_commands.create`
+
+Required:
+
+- `command` (String) The create command to execute.
+
+Optional:
+
+- `interpreter` (List of String) The interpreter to use for executing the create command; if not set the platform default interpreter will be used.
+
+
+<a id="nestedatt--os_commands--delete"></a>
+### Nested Schema for `os_commands.delete`
+
+Required:
+
+- `command` (String) The delete command to execute.
+
+Optional:
+
+- `interpreter` (List of String) The interpreter to use for executing the delete command; if not set the platform default interpreter will be used.
+
+
+<a id="nestedatt--os_commands--read"></a>
+### Nested Schema for `os_commands.read`
+
+Required:
+
+- `command` (String) The read command to execute.
+
+Optional:
+
+- `interpreter` (List of String) The interpreter to use for executing the read command; if not set the platform default interpreter will be used.
+
+
+<a id="nestedatt--os_commands--update"></a>
+### Nested Schema for `os_commands.update`
+
+Required:
+
+- `command` (String) The update command to execute.
+
+Optional:
+
+- `interpreter` (List of String) The interpreter to use for executing the update command; if not set the platform default interpreter will be used.
+
 
 
 <a id="nestedatt--timeouts"></a>
@@ -89,7 +165,7 @@ Required:
 
 Optional:
 
-- `create` (String) Timeout for creating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
-- `delete` (String) Timeout for deleting the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
-- `read` (String) Timeout for reading the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
-- `update` (String) Timeout for updating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `create` (String) Timeout for creating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `delete` (String) Timeout for deleting the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `read` (String) Timeout for reading the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).
+- `update` (String) Timeout for updating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).

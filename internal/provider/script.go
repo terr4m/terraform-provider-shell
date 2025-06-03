@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -30,20 +31,25 @@ type ScriptResource struct {
 
 // ScriptResourceModel describes the resource data model.
 type ScriptResourceModel struct {
-	Interpreter      types.List     `tfsdk:"interpreter"`
 	Environment      types.Map      `tfsdk:"environment"`
 	WorkingDirectory types.String   `tfsdk:"working_directory"`
-	Commands         *ScriptsModel  `tfsdk:"commands"`
+	OSCommands       types.Map      `tfsdk:"os_commands"`
 	Output           types.Dynamic  `tfsdk:"output"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
 }
 
-// ScriptsModel describes the scripts data model.
-type ScriptsModel struct {
-	Create types.String `tfsdk:"create"`
-	Read   types.String `tfsdk:"read"`
-	Update types.String `tfsdk:"update"`
-	Delete types.String `tfsdk:"delete"`
+// CRUDCommandsModel describes a set of CRUD commands.
+type CRUDCommandsModel struct {
+	Create CommandModel `tfsdk:"create"`
+	Read   CommandModel `tfsdk:"read"`
+	Update CommandModel `tfsdk:"update"`
+	Delete CommandModel `tfsdk:"delete"`
+}
+
+// CommandModel describes an interpreter and a command string.
+type CommandModel struct {
+	Interpreter types.List   `tfsdk:"interpreter"`
+	Command     types.String `tfsdk:"command"`
 }
 
 // Metadata returns the resource metadata.
@@ -55,17 +61,8 @@ func (d *ScriptResource) Metadata(ctx context.Context, req resource.MetadataRequ
 func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the `TF_STATE_OUTPUT` environment variable.",
+		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable.",
 		Attributes: map[string]schema.Attribute{
-			"interpreter": schema.ListAttribute{
-				Description:         "The interpreter to use for executing the commands; if not set the provider interpreter will be used.",
-				MarkdownDescription: "The interpreter to use for executing the commands; if not set the provider interpreter will be used.",
-				ElementType:         types.StringType,
-				Optional:            true,
-				Validators: []validator.List{
-					listvalidator.SizeAtLeast(1),
-				},
-			},
 			"environment": schema.MapAttribute{
 				Description:         "The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.",
 				MarkdownDescription: "The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.",
@@ -74,29 +71,87 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"working_directory": schema.StringAttribute{
 				Description:         "The working directory to use when executing the commands; this will default to the Terraform working directory.",
-				MarkdownDescription: "The working directory to use when executing the commands; this will default to the _Terraform_ working directory..",
+				MarkdownDescription: "The working directory to use when executing the commands; this will default to the _Terraform_ working directory.",
 				Optional:            true,
 			},
-			"commands": schema.SingleNestedAttribute{
-				Description:         "The commands to run as part of the Terraform lifecycle.",
-				MarkdownDescription: "The commands to run as part of the _Terraform_ lifecycle. All commands must write a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable.",
+			"os_commands": schema.MapNestedAttribute{
+				Description:         "A map of commands to run as part of the Terraform lifecycle where the map key is the GOOS value or default; default must be provided.",
+				MarkdownDescription: "A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided.",
 				Required:            true,
-				Attributes: map[string]schema.Attribute{
-					"create": schema.StringAttribute{
-						MarkdownDescription: "The command to execute when creating the resource.",
-						Required:            true,
-					},
-					"read": schema.StringAttribute{
-						MarkdownDescription: "The command to execute when reading the resource.",
-						Required:            true,
-					},
-					"update": schema.StringAttribute{
-						MarkdownDescription: "The command to execute when updating the resource.",
-						Required:            true,
-					},
-					"delete": schema.StringAttribute{
-						MarkdownDescription: "The command to execute when deleting the resource.",
-						Required:            true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"create": schema.SingleNestedAttribute{
+							MarkdownDescription: "The create command configuration.",
+							Required:            true,
+							Attributes: map[string]schema.Attribute{
+								"interpreter": schema.ListAttribute{
+									MarkdownDescription: "The interpreter to use for executing the create command; if not set the platform default interpreter will be used.",
+									ElementType:         types.StringType,
+									Optional:            true,
+									Validators: []validator.List{
+										listvalidator.SizeAtLeast(1),
+									},
+								},
+								"command": schema.StringAttribute{
+									MarkdownDescription: "The create command to execute.",
+									Required:            true,
+								},
+							},
+						},
+						"read": schema.SingleNestedAttribute{
+							MarkdownDescription: "The read command configuration.",
+							Required:            true,
+							Attributes: map[string]schema.Attribute{
+								"interpreter": schema.ListAttribute{
+									MarkdownDescription: "The interpreter to use for executing the read command; if not set the platform default interpreter will be used.",
+									ElementType:         types.StringType,
+									Optional:            true,
+									Validators: []validator.List{
+										listvalidator.SizeAtLeast(1),
+									},
+								},
+								"command": schema.StringAttribute{
+									MarkdownDescription: "The read command to execute.",
+									Required:            true,
+								},
+							},
+						},
+						"update": schema.SingleNestedAttribute{
+							MarkdownDescription: "The update command configuration.",
+							Required:            true,
+							Attributes: map[string]schema.Attribute{
+								"interpreter": schema.ListAttribute{
+									MarkdownDescription: "The interpreter to use for executing the update command; if not set the platform default interpreter will be used.",
+									ElementType:         types.StringType,
+									Optional:            true,
+									Validators: []validator.List{
+										listvalidator.SizeAtLeast(1),
+									},
+								},
+								"command": schema.StringAttribute{
+									MarkdownDescription: "The update command to execute.",
+									Required:            true,
+								},
+							},
+						},
+						"delete": schema.SingleNestedAttribute{
+							MarkdownDescription: "The delete command configuration.",
+							Required:            true,
+							Attributes: map[string]schema.Attribute{
+								"interpreter": schema.ListAttribute{
+									MarkdownDescription: "The interpreter to use for executing the delete command; if not set the platform default interpreter will be used.",
+									ElementType:         types.StringType,
+									Optional:            true,
+									Validators: []validator.List{
+										listvalidator.SizeAtLeast(1),
+									},
+								},
+								"command": schema.StringAttribute{
+									MarkdownDescription: "The delete command to execute.",
+									Required:            true,
+								},
+							},
+						},
 					},
 				},
 			},
@@ -107,13 +162,13 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
 				Create:            true,
-				CreateDescription: "Timeout for creating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				CreateDescription: "Timeout for creating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 				Read:              true,
-				ReadDescription:   "Timeout for reading the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				ReadDescription:   "Timeout for reading the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 				Update:            true,
-				UpdateDescription: "Timeout for updating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				UpdateDescription: "Timeout for updating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 				Delete:            true,
-				DeleteDescription: "Timeout for deleting the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				DeleteDescription: "Timeout for deleting the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 			}),
 		},
 	}
@@ -141,6 +196,17 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
+	var commands map[string]CRUDCommandsModel
+	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var command CRUDCommandsModel
+	command, ok := commands[runtime.GOOS]
+	if !ok {
+		command = commands["default"]
+	}
+
 	timeout, diags := data.Timeouts.Create(ctx, r.providerData.DefaultTimeouts.Create)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
@@ -149,7 +215,7 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Create, nil, true)
+	raw, diags := runCommand(ctx, r.providerData, command.Create.Interpreter, data.Environment, data.WorkingDirectory, command.Create.Command, TFLifecycleCreate, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -171,6 +237,17 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
+	var commands map[string]CRUDCommandsModel
+	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var command CRUDCommandsModel
+	command, ok := commands[runtime.GOOS]
+	if !ok {
+		command = commands["default"]
+	}
+
 	timeout, diags := data.Timeouts.Read(ctx, r.providerData.DefaultTimeouts.Read)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
@@ -190,7 +267,7 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Read, stateOutput, true)
+	raw, diags := runCommand(ctx, r.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -212,6 +289,17 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
+	var commands map[string]CRUDCommandsModel
+	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var command CRUDCommandsModel
+	command, ok := commands[runtime.GOOS]
+	if !ok {
+		command = commands["default"]
+	}
+
 	timeout, diags := data.Timeouts.Update(ctx, r.providerData.DefaultTimeouts.Update)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
@@ -231,7 +319,7 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Update, stateOutput, true)
+	raw, diags := runCommand(ctx, r.providerData, command.Update.Interpreter, data.Environment, data.WorkingDirectory, command.Update.Command, TFLifecycleUpdate, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -253,6 +341,17 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
+	var commands map[string]CRUDCommandsModel
+	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var command CRUDCommandsModel
+	command, ok := commands[runtime.GOOS]
+	if !ok {
+		command = commands["default"]
+	}
+
 	timeout, diags := data.Timeouts.Delete(ctx, r.providerData.DefaultTimeouts.Delete)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
@@ -272,7 +371,7 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	_, diags = runCommand(ctx, r.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Commands.Delete, stateOutput, false)
+	_, diags = runCommand(ctx, r.providerData, command.Delete.Interpreter, data.Environment, data.WorkingDirectory, command.Delete.Command, TFLifecycleDelete, stateOutput, false)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
