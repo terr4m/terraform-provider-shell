@@ -9,6 +9,15 @@ description: |-
 
 {{ .Description | trimspace }}
 
+## Environment Variables
+
+The _Shell_ provider uses environment variables and files to enable communication between the provider code and the scripts that are being executed. The following environment variables are used by all resources and data sources:
+
+| **Name** | **Description** |
+| :--- | :--- |
+| `TF_SCRIPT_LIFECYCLE` | The current lifecycle that triggered the script; this can be one of `create`, `read`, `update`, or `delete`. |
+| `TF_SCRIPT_OUTPUT` | The path to the file where the script output must be written; the output must be valid JSON. |
+
 {{ if .HasExample -}}
 ## Example Usage
 
