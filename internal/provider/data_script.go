@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -28,12 +29,16 @@ type ScriptDataSource struct {
 
 // ScriptDataSourceModel describes the data source data model.
 type ScriptDataSourceModel struct {
-	Interpreter      types.List     `tfsdk:"interpreter"`
 	Environment      types.Map      `tfsdk:"environment"`
 	WorkingDirectory types.String   `tfsdk:"working_directory"`
-	Command          types.String   `tfsdk:"command"`
+	OSCommands       types.Map      `tfsdk:"os_commands"`
 	Output           types.Dynamic  `tfsdk:"output"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
+}
+
+// ReadCommandModel describes a set of CRUD commands.
+type ReadCommandModel struct {
+	Read CommandModel `tfsdk:"read"`
 }
 
 // Metadata returns the data source metadata.
@@ -47,15 +52,6 @@ func (d *ScriptDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 		Description:         "The Shell script data source allows you to execute an arbitrary command as the read part of a Terraform lifecycle.",
 		MarkdownDescription: "The _Shell_ script data source (`shell_script`) allows you to execute an arbitrary command as the read part of a _Terraform_ lifecycle. The script must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading.",
 		Attributes: map[string]schema.Attribute{
-			"interpreter": schema.ListAttribute{
-				Description:         "The interpreter to use for executing the command; if not set the provider interpreter will be used.",
-				MarkdownDescription: "The interpreter to use for executing the command; if not set the provider interpreter will be used.",
-				ElementType:         types.StringType,
-				Optional:            true,
-				Validators: []validator.List{
-					listvalidator.SizeAtLeast(1),
-				},
-			},
 			"environment": schema.MapAttribute{
 				Description:         "The environment variables to set when executing command; to be combined with the OS environment and the provider environment.",
 				MarkdownDescription: "The environment variables to set when executing command; to be combined with the OS environment and the provider environment.",
@@ -67,10 +63,32 @@ func (d *ScriptDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 				MarkdownDescription: "The working directory to use when executing the command; this will default to the _Terraform_ working directory..",
 				Optional:            true,
 			},
-			"command": schema.StringAttribute{
-				Description:         "The command to run when reading the data source.",
-				MarkdownDescription: "The command to run when reading the data source; this must write a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable.",
+			"os_commands": schema.MapNestedAttribute{
+				Description:         "A map of commands to run as part of the Terraform lifecycle where the map key is the GOOS value or default; default must be provided.",
+				MarkdownDescription: "A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided.",
 				Required:            true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"read": schema.SingleNestedAttribute{
+							MarkdownDescription: "The read command configuration.",
+							Required:            true,
+							Attributes: map[string]schema.Attribute{
+								"interpreter": schema.ListAttribute{
+									MarkdownDescription: "The interpreter to use for executing the read command; if not set the platform default interpreter will be used.",
+									ElementType:         types.StringType,
+									Optional:            true,
+									Validators: []validator.List{
+										listvalidator.SizeAtLeast(1),
+									},
+								},
+								"command": schema.StringAttribute{
+									MarkdownDescription: "The read command to execute.",
+									Required:            true,
+								},
+							},
+						},
+					},
+				},
 			},
 			"output": schema.DynamicAttribute{
 				Description:         "The output of the script as a structured type.",
@@ -79,7 +97,7 @@ func (d *ScriptDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
 				Read:            true,
-				ReadDescription: "Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration] (https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
+				ReadDescription: "Timeout for reading the data source; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
 			}),
 		},
 	}
@@ -107,6 +125,17 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
+	var commands map[string]ReadCommandModel
+	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var command ReadCommandModel
+	command, ok := commands[runtime.GOOS]
+	if !ok {
+		command = commands["default"]
+	}
+
 	timeout, diags := data.Timeouts.Read(ctx, d.providerData.DefaultTimeouts.Read)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
@@ -115,7 +144,7 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, d.providerData, data.Interpreter, data.Environment, data.WorkingDirectory, data.Command, nil, true)
+	raw, diags := runCommand(ctx, d.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
