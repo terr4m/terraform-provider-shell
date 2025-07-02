@@ -45,7 +45,6 @@ checksum:
 
 signs:
   - id: gpg
-    signature: "${artifact}_sig"
     cmd: gpg
     args:
       - --batch
