@@ -50,7 +50,7 @@ func TestRunCommand(t *testing.T) {
 		env          map[string]string
 		dir          string
 		command      string
-		logger       *testLogger
+		logProvider  *LogProvider
 		hasErr       bool
 		loggerResult *testLogger
 	}{
@@ -61,7 +61,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "",
 			command:      `echo "hello"`,
-			logger:       nil,
+			logProvider:  nil,
 			hasErr:       true,
 			loggerResult: nil,
 		},
@@ -72,7 +72,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "",
 			command:      `xxxxxx`,
-			logger:       nil,
+			logProvider:  nil,
 			hasErr:       true,
 			loggerResult: nil,
 		},
@@ -83,7 +83,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "",
 			command:      `echo "hello"`,
-			logger:       nil,
+			logProvider:  nil,
 			hasErr:       false,
 			loggerResult: nil,
 		},
@@ -94,7 +94,7 @@ func TestRunCommand(t *testing.T) {
 			env:          map[string]string{"TEST": "hello"},
 			dir:          "",
 			command:      `echo "${TEST}"`,
-			logger:       nil,
+			logProvider:  nil,
 			hasErr:       false,
 			loggerResult: nil,
 		},
@@ -105,7 +105,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "/tmp",
 			command:      `echo "hello"`,
-			logger:       nil,
+			logProvider:  nil,
 			hasErr:       false,
 			loggerResult: nil,
 		},
@@ -116,7 +116,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "/tmp",
 			command:      `echo "Test..."`,
-			logger:       &testLogger{},
+			logProvider:  &LogProvider{Logger: &testLogger{}},
 			hasErr:       false,
 			loggerResult: &testLogger{},
 		},
@@ -127,7 +127,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "/tmp",
 			command:      `echo "[ERROR] Test error"`,
-			logger:       &testLogger{},
+			logProvider:  &LogProvider{Logger: &testLogger{}},
 			hasErr:       false,
 			loggerResult: &testLogger{errors: []string{"Test error"}},
 		},
@@ -138,7 +138,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "/tmp",
 			command:      `echo "[WARN] Test warn"`,
-			logger:       &testLogger{},
+			logProvider:  &LogProvider{Logger: &testLogger{}},
 			hasErr:       false,
 			loggerResult: &testLogger{warnings: []string{"Test warn"}},
 		},
@@ -149,7 +149,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "/tmp",
 			command:      `echo "[INFO] Test info"`,
-			logger:       &testLogger{},
+			logProvider:  &LogProvider{Logger: &testLogger{}},
 			hasErr:       false,
 			loggerResult: &testLogger{infos: []string{"Test info"}},
 		},
@@ -160,7 +160,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "/tmp",
 			command:      `echo "[DEBUG] Test debug"`,
-			logger:       &testLogger{},
+			logProvider:  &LogProvider{Logger: &testLogger{}},
 			hasErr:       false,
 			loggerResult: &testLogger{debugs: []string{"Test debug"}},
 		},
@@ -171,7 +171,7 @@ func TestRunCommand(t *testing.T) {
 			env:          nil,
 			dir:          "/tmp",
 			command:      `echo "[TRACE] Test trace"`,
-			logger:       &testLogger{},
+			logProvider:  &LogProvider{Logger: &testLogger{}},
 			hasErr:       false,
 			loggerResult: &testLogger{traces: []string{"Test trace"}},
 		},
@@ -184,32 +184,34 @@ func TestRunCommand(t *testing.T) {
 			}
 
 			ctx := t.Context()
-			err := RunCommand(ctx, d.interpreter, d.env, d.dir, d.command, d.logger)
+			err := RunCommand(ctx, d.interpreter, d.env, d.dir, d.command, d.logProvider)
 
 			hasErr := err != nil
 			if hasErr != d.hasErr {
 				t.Errorf("unexpected error state")
 			}
 
-			if d.logger != nil {
-				if !reflect.DeepEqual(d.logger.errors, d.loggerResult.errors) {
-					t.Errorf("expected errors %v, got %v", d.loggerResult.errors, d.logger.errors)
+			if d.logProvider != nil {
+				logger, _ := d.logProvider.Logger.(*testLogger)
+
+				if !reflect.DeepEqual(logger.errors, d.loggerResult.errors) {
+					t.Errorf("expected errors %v, got %v", d.loggerResult.errors, logger.errors)
 				}
 
-				if !reflect.DeepEqual(d.logger.warnings, d.loggerResult.warnings) {
-					t.Errorf("expected warnings %v, got %v", d.loggerResult.warnings, d.logger.warnings)
+				if !reflect.DeepEqual(logger.warnings, d.loggerResult.warnings) {
+					t.Errorf("expected warnings %v, got %v", d.loggerResult.warnings, logger.warnings)
 				}
 
-				if !reflect.DeepEqual(d.logger.infos, d.loggerResult.infos) {
-					t.Errorf("expected infos %v, got %v", d.loggerResult.infos, d.logger.infos)
+				if !reflect.DeepEqual(logger.infos, d.loggerResult.infos) {
+					t.Errorf("expected infos %v, got %v", d.loggerResult.infos, logger.infos)
 				}
 
-				if !reflect.DeepEqual(d.logger.debugs, d.loggerResult.debugs) {
-					t.Errorf("expected debugs %v, got %v", d.loggerResult.debugs, d.logger.debugs)
+				if !reflect.DeepEqual(logger.debugs, d.loggerResult.debugs) {
+					t.Errorf("expected debugs %v, got %v", d.loggerResult.debugs, logger.debugs)
 				}
 
-				if !reflect.DeepEqual(d.logger.traces, d.loggerResult.traces) {
-					t.Errorf("expected traces %v, got %v", d.loggerResult.traces, d.logger.traces)
+				if !reflect.DeepEqual(logger.traces, d.loggerResult.traces) {
+					t.Errorf("expected traces %v, got %v", d.loggerResult.traces, logger.traces)
 				}
 			}
 		})

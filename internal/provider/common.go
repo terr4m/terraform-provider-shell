@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -69,13 +71,20 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 		environment[StateOutputEnv] = string(by)
 	}
 
-	var log *tflogLogger
+	var logProvider *shell.LogProvider
 	if providerData.LogOutput {
-		log = &tflogLogger{}
+		logProvider = &shell.LogProvider{
+			Logger: &tflogLogger{},
+		}
 	}
 
-	err = shell.RunCommand(ctx, interpreter, environment, tfWorkingDirectory.ValueString(), tfCommand.ValueString(), log)
+	err = shell.RunCommand(ctx, interpreter, environment, tfWorkingDirectory.ValueString(), tfCommand.ValueString(), logProvider)
 	if err != nil {
+		if exitError, ok := err.(*exec.ExitError); ok {
+			diags.AddError(fmt.Sprintf("Command failed with exit code: %d", exitError.ExitCode()), string(exitError.Stderr))
+			return nil, diags
+		}
+
 		diags.AddError("Failed to run command.", err.Error())
 		return nil, diags
 	}

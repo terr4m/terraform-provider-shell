@@ -11,7 +11,7 @@ on:
       - main
 
 concurrency:
-  group: codeql
+  group: codeql-${{ github.ref }}
   cancel-in-progress: true
 
 permissions: read-all
