@@ -17,21 +17,26 @@ type Logger interface {
 	Trace(ctx context.Context, msg string, additionalFields ...map[string]any)
 }
 
+// LogProvider provides a logger for the shell package.
+type LogProvider struct {
+	Logger Logger
+}
+
 // RunCommand runs a script in a given working directory.
-func RunCommand(ctx context.Context, interpreter []string, env map[string]string, dir, command string, logger Logger) error {
+func RunCommand(ctx context.Context, interpreter []string, env map[string]string, dir, command string, logProvider *LogProvider) error {
 	cmd := exec.CommandContext(ctx, interpreter[0], append(interpreter[1:], command)...)
 	cmd.Dir = dir
 
 	setEnv(cmd, env, true)
 
-	if logger == nil {
+	if logProvider == nil {
 		cmd.Stdout = nil
 		cmd.Stderr = nil
 
 		return cmd.Run()
 	}
 
-	return runCommandLogOutput(ctx, cmd, logger)
+	return runCommandLogOutput(ctx, cmd, logProvider.Logger)
 }
 
 // setEnv sets the environment variables for a command.
@@ -82,10 +87,10 @@ func runCommandLogOutput(ctx context.Context, cmd *exec.Cmd, logger Logger) erro
 		}
 	}
 
-	if scanner.Err() != nil {
+	if err := scanner.Err(); err != nil {
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
-		return scanner.Err()
+		return err
 	}
 
 	return cmd.Wait()

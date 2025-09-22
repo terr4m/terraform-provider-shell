@@ -12,7 +12,11 @@ import (
 )
 
 func TestAccScriptDataSource(t *testing.T) {
+	t.Parallel()
+
 	t.Run("read", func(t *testing.T) {
+		t.Parallel()
+
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -52,6 +56,8 @@ data "shell_script" "test" {
 	})
 
 	t.Run("read_os_script", func(t *testing.T) {
+		t.Parallel()
+
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -95,6 +101,8 @@ data "shell_script" "test" {
 	})
 
 	t.Run("read_with_ignored_output", func(t *testing.T) {
+		t.Parallel()
+
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -138,6 +146,8 @@ data "shell_script" "test" {
 	})
 
 	t.Run("read_with_interpreter", func(t *testing.T) {
+		t.Parallel()
+
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -180,6 +190,8 @@ data "shell_script" "test" {
 	})
 
 	t.Run("read_with_environment", func(t *testing.T) {
+		t.Parallel()
+
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -223,6 +235,8 @@ data "shell_script" "test" {
 	})
 
 	t.Run("read_with_timeout", func(t *testing.T) {
+		t.Parallel()
+
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -263,6 +277,8 @@ data "shell_script" "test" {
 	})
 
 	t.Run("read_with_timeout_error", func(t *testing.T) {
+		t.Parallel()
+
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
