@@ -2,12 +2,12 @@
 page_title: "shell_script (Resource) - terraform-provider-shell"
 subcategory: ""
 description: |-
-  The Shell script resource (shell_script) allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the TF_SCRIPT_STATE_OUTPUT environment variable.
+  The Shell script resource (shell_script) allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. You can access the state output value in in the read, update and delete commands via the TF_SCRIPT_STATE_OUTPUT environment variable. If a script exits with a non-zero code the provider will ready any text from the file defined by the TF_SCRIPT_ERROR environment variable and return it as part of the error diagnostics.
 ---
 
 # shell_script (Resource)
 
-The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable.
+The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the state output value in in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.
 
 ## Example Usage
 
