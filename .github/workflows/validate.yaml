@@ -145,6 +145,13 @@ jobs:
           terraform_version: ${{ matrix.tf_version }}
           terraform_wrapper: false
 
+      - name: Terraform Path
+        id: tf
+        run: |
+          set -euo pipefail
+
+          echo "path=$(command -v terraform || true)" >> "${GITHUB_OUTPUT}"
+
       - name: Go mod download
         run: go mod download
 
@@ -152,6 +159,7 @@ jobs:
         env:
           TF_ACC: "1"
           TF_ACC_TERRAFORM_VERSION: ${{ matrix.tf_version }}
+          TF_ACC_TERRAFORM_PATH: ${{ steps.tf.outputs.path }}
         run: go test -v -timeout 120m -cover ./...
 
   check:

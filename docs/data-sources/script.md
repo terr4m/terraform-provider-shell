@@ -2,12 +2,12 @@
 page_title: "shell_script (Data Source) - terraform-provider-shell"
 subcategory: ""
 description: |-
-  The Shell script data source (shell_script) allows you to execute an arbitrary command as the read part of a Terraform lifecycle. The script must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading.
+  The Shell script data source (shell_script) allows you to execute an arbitrary command as the read part of a Terraform lifecycle. The script must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. If the script exits with a non-zero code the provider will ready any text from the file defined by the TF_SCRIPT_ERROR environment variable and return it as part of the error diagnostics.
 ---
 
 # shell_script (Data Source)
 
-The _Shell_ script data source (`shell_script`) allows you to execute an arbitrary command as the read part of a _Terraform_ lifecycle. The script must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading.
+The _Shell_ script data source (`shell_script`) allows you to execute an arbitrary command as the read part of a _Terraform_ lifecycle. The script must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If the script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.
 
 ## Example Usage
 

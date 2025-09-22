@@ -61,7 +61,7 @@ func (d *ScriptResource) Metadata(ctx context.Context, req resource.MetadataRequ
 func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the output value in state in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable.",
+		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the state output value in in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.",
 		Attributes: map[string]schema.Attribute{
 			"environment": schema.MapAttribute{
 				Description:         "The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.",

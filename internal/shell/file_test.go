@@ -14,8 +14,21 @@ func TestGetOutFilePath(t *testing.T) {
 		t.Error(err)
 	}
 
-	if match, _ := regexp.MatchString("^/tmp/tf-script-output-.*.json$", path); !match {
+	if match, _ := regexp.MatchString(`tf-script-output-.+\.json$`, path); !match {
 		t.Error("output file path is not valid")
+	}
+}
+
+func TestGetErrorFilePath(t *testing.T) {
+	t.Parallel()
+
+	path, err := GetErrorFilePath()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if match, _ := regexp.MatchString(`tf-script-error-.+$`, path); !match {
+		t.Error("error file path is not valid")
 	}
 }
 

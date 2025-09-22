@@ -315,4 +315,40 @@ data "shell_script" "test" {
 			},
 		})
 	})
+
+	t.Run("read_with_error_message", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          printf 'my-error' > "$${TF_SCRIPT_ERROR}"
+          exit 1
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          'my-error' | Out-File -FilePath $env:TF_SCRIPT_ERROR -Encoding utf8
+          exit 1
+        EOF
+      }
+    }
+  }
+}
+`,
+					ExpectError: regexp.MustCompile("my-error"),
+				},
+			},
+		})
+	})
 }

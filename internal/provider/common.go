@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	ScriptOutPutFilePathEnv string = "TF_SCRIPT_OUTPUT"
+	ScriptOutputFilePathEnv string = "TF_SCRIPT_OUTPUT"
+	ScriptErrorFilePathEnv  string = "TF_SCRIPT_ERROR"
 	StateOutputEnv          string = "TF_SCRIPT_STATE_OUTPUT"
 	LifecycleEnv            string = "TF_SCRIPT_LIFECYCLE"
 )
@@ -58,8 +59,16 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 	}
 	defer os.Remove(outFilePath)
 
+	errorFilePath, err := shell.GetErrorFilePath()
+	if err != nil {
+		diags.AddError("Failed to get error file path.", err.Error())
+		return nil, diags
+	}
+	defer os.Remove(errorFilePath)
+
 	environment[LifecycleEnv] = string(lifecycle)
-	environment[ScriptOutPutFilePathEnv] = outFilePath
+	environment[ScriptOutputFilePathEnv] = outFilePath
+	environment[ScriptErrorFilePathEnv] = errorFilePath
 
 	if stateOutput != nil {
 		by, err := json.Marshal(stateOutput)
@@ -81,7 +90,12 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 	err = shell.RunCommand(ctx, interpreter, environment, tfWorkingDirectory.ValueString(), tfCommand.ValueString(), logProvider)
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			diags.AddError(fmt.Sprintf("Command failed with exit code: %d", exitError.ExitCode()), string(exitError.Stderr))
+			detail := ""
+			by, err := os.ReadFile(errorFilePath)
+			if err == nil {
+				detail = string(by)
+			}
+			diags.AddError(fmt.Sprintf("Command failed with exit code: %d", exitError.ExitCode()), detail)
 			return nil, diags
 		}
 

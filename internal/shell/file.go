@@ -12,6 +12,11 @@ func GetOutFilePath() (string, error) {
 	return getTempFile("tf-script-output-*.json")
 }
 
+// GetErrorFilePath returns the path to the output file.
+func GetErrorFilePath() (string, error) {
+	return getTempFile("tf-script-error-*")
+}
+
 // ReadOutJSON reads the output file as JSON and returns the contents.
 func ReadOutJSON(p string) (any, error) {
 	f, err := os.Open(p)

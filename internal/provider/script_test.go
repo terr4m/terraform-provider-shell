@@ -552,4 +552,76 @@ resource "shell_script" "test" {
 			},
 		})
 	})
+
+	t.Run("error_message", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+resource "shell_script" "test" {
+  os_commands = {
+    default = {
+      create = {
+        command = <<-EOF
+          printf 'my-error' > "$${TF_SCRIPT_ERROR}"
+          exit 1
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          printf 'my-error' > "$${TF_SCRIPT_ERROR}"
+          exit 1
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          printf 'my-error' > "$${TF_SCRIPT_ERROR}"
+          exit 1
+        EOF
+      }
+      delete = {
+        command = <<-EOF
+          printf 'my-error' > "$${TF_SCRIPT_ERROR}"
+          exit 1
+        EOF
+      }
+    }
+    windows = {
+      create = {
+        command = <<-EOF
+          'my-error' | Out-File -FilePath $env:TF_SCRIPT_ERROR -Encoding utf8
+          exit 1
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          'my-error' | Out-File -FilePath $env:TF_SCRIPT_ERROR -Encoding utf8
+          exit 1
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          'my-error' | Out-File -FilePath $env:TF_SCRIPT_ERROR -Encoding utf8
+          exit 1
+        EOF
+      }
+      delete = {
+        command = <<-EOF
+          'my-error' | Out-File -FilePath $env:TF_SCRIPT_ERROR -Encoding utf8
+          exit 1
+        EOF
+      }
+    }
+  }
+}
+`,
+					ExpectError: regexp.MustCompile(`my-error`),
+				},
+			},
+		})
+	})
 }
