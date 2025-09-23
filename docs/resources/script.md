@@ -2,26 +2,27 @@
 page_title: "shell_script (Resource) - terraform-provider-shell"
 subcategory: ""
 description: |-
-  The Shell script resource (shell_script) allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. You can access the state output value in in the read, update and delete commands via the TF_SCRIPT_STATE_OUTPUT environment variable. If a script exits with a non-zero code the provider will ready any text from the file defined by the TF_SCRIPT_ERROR environment variable and return it as part of the error diagnostics.
+  The Shell script resource (shell_script) allows you to execute arbitrary commands as part of a Terraform lifecycle. All commands must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. If a script exits with a non-zero code the provider will ready any text from the file defined by the TF_SCRIPT_ERROR environment variable and return it as part of the error diagnostics.
 ---
 
 # shell_script (Resource)
 
-The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the state output value in in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.
+The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.
 
 ## Example Usage
 
 ```terraform
 resource "shell_script" "example" {
-  environment = {
-    "TARGET_FILE" = "foo"
+  inputs = {
+    file_name = "foo"
   }
   os_commands = {
     default = {
       create = {
         command = <<-EOF
           set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
           touch "$${path}"
           printf '{"exists": true,"path":"%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
         EOF
@@ -29,7 +30,8 @@ resource "shell_script" "example" {
       read = {
         command = <<-EOF
           set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
           if [[ -f "$${path}" ]]; then
             printf '{"exists": true,"path":"%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
           else
@@ -40,34 +42,39 @@ resource "shell_script" "example" {
       update = {
         command = <<-EOF
           set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
           old_path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
           if [[ "$${path}" != "$${old_path}" ]] && [[ -f "$${old_path}" ]]; then
-            rm -f "$${old_path}"
+            mv -f "$${old_path}" "$${path}"
+          else
+            touch "$${path}"
           fi
-          touch "$${path}"
           printf '{"exists": true,"path":"%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       delete = {
         command = <<-EOF
           set -euo pipefail
-					path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
-          rm -f "/tmp/$${path}"
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
+          rm -f "$${path}"
         EOF
       }
     }
     windows = {
       create = {
         command = <<-EOF
-          $path = "$env:TEMP\$env:TARGET_FILE"
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
           New-Item -Path $path -ItemType File -Force
           @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       read = {
         command = <<-EOF
-          $path = "$env:TEMP\$env:TARGET_FILE"
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
           if (Test-Path $path) {
             @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
           } else {
@@ -77,21 +84,23 @@ resource "shell_script" "example" {
       }
       update = {
         command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
           $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
-          $path = "$env:TEMP\$env:TARGET_FILE"
           $oldPath = $state.path
           if ($path -ne $oldPath) {
-            Remove-Item -Path $oldPath -Force
+            Move-Item -Path $oldPath -Destination $path -Force
+          } else {
+            New-Item -Path $path -ItemType File -Force
           }
-          New-Item -Path $path -ItemType File -Force
           @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       delete = {
         command = <<-EOF
-          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
-          $path = $state.path
-          Remove-Item -Path $file -Force
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
+          Remove-Item -Path $path -Force
         EOF
       }
     }
@@ -109,12 +118,13 @@ resource "shell_script" "example" {
 ### Optional
 
 - `environment` (Map of String) The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.
+- `inputs` (Dynamic) Inputs to be made available to the script; these can be accessed as JSON via the `TF_SCRIPT_INPUTS` environment variable.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 - `working_directory` (String) The working directory to use when executing the commands; this will default to the _Terraform_ working directory.
 
 ### Read-Only
 
-- `output` (Dynamic) The output of the script as a structured type.
+- `output` (Dynamic) The output of the script as a structured type; this can be accessed in the read, update and delete commands as JSON via the `TF_SCRIPT_STATE_OUTPUT` environment variable.
 
 <a id="nestedatt--os_commands"></a>
 ### Nested Schema for `os_commands`

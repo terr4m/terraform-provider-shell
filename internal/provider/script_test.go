@@ -23,56 +23,42 @@ func TestAccScriptResource(t *testing.T) {
 			t.Skip("skipping test on windows platform")
 		}
 
-		file := acctest.RandomWithPrefix("tf-script-test")
-
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: fmt.Sprintf(`
+					Config: `
 resource "shell_script" "test" {
-  environment = {
-    "TARGET_FILE" = "%s"
-  }
   os_commands = {
     default = {
       create = {
         command = <<-EOF
           set -euo pipefail
-          touch "/tmp/$${TARGET_FILE}"
-          printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
+          printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       read = {
         command = <<-EOF
           set -euo pipefail
-          if [[ -f "/tmp/$${TARGET_FILE}" ]]; then
-            printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
-          else
-            printf '{"exists": false}' > "$${TF_SCRIPT_OUTPUT}"
-          fi
+          printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       update = {
         command = <<-EOF
           set -euo pipefail
-          touch "/tmp/$${TARGET_FILE}"
-          printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
+          printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       delete = {
-        command = <<-EOF
-          set -euo pipefail
-          rm -f "/tmp/$${TARGET_FILE}"
-        EOF
+        command = ""
       }
     }
   }
 }
-`, file),
+`,
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"exists": knownvalue.Bool(true)})),
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"run": knownvalue.Bool(true)})),
 					},
 				},
 			},
@@ -82,18 +68,13 @@ resource "shell_script" "test" {
 	t.Run("create_os", func(t *testing.T) {
 		t.Parallel()
 
-		file := acctest.RandomWithPrefix("tf-script-test")
-
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: fmt.Sprintf(`
+					Config: `
 resource "shell_script" "test" {
-  environment = {
-    "TARGET_FILE" = "%s"
-  }
   os_commands = {
     default = {
       create = {
@@ -125,67 +106,192 @@ resource "shell_script" "test" {
       create = {
         command = <<-EOF
           set -euo pipefail
-          touch "/tmp/$${TARGET_FILE}"
-          printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
+          printf '{"os": "linux"}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       read = {
         command = <<-EOF
           set -euo pipefail
-          if [[ -f "/tmp/$${TARGET_FILE}" ]]; then
-            printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
-          else
-            printf '{"exists": false}' > "$${TF_SCRIPT_OUTPUT}"
-          fi
+          printf '{"os": "linux"}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       update = {
         command = <<-EOF
           set -euo pipefail
-          touch "/tmp/$${TARGET_FILE}"
-          printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
+          printf '{"os": "linux"}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       delete = {
-        command = <<-EOF
-          set -euo pipefail
-          rm -f "/tmp/$${TARGET_FILE}"
-        EOF
+        command = ""
       }
     }
     windows = {
       create = {
         command = <<-EOF
-          New-Item -Path "$env:TEMP\$env:TARGET_FILE" -ItemType File -Force
-          '{"exists": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          '{"os": "windows"}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       read = {
         command = <<-EOF
-          if (Test-Path "$env:TEMP\$env:TARGET_FILE") {
-            '{"exists": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          } else {
-            '{"exists": false}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          }
+          '{"os": "windows"}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       update = {
         command = <<-EOF
-          New-Item -Path "$env:TEMP\$env:TARGET_FILE" -ItemType File -Force
-          '{"exists": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          '{"os": "windows"}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       delete = {
-        command = <<-EOF
-          Remove-Item -Path "$env:TEMP\$env:TARGET_FILE" -Force -ErrorAction SilentlyContinue
-        EOF
+        command = ""
       }
     }
   }
 }
-`, file),
+`,
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"exists": knownvalue.Bool(true)})),
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"os": knownvalue.StringExact(runtime.GOOS)})),
+					},
+				},
+			},
+		})
+	})
+
+	t.Run("create_with_environment", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+resource "shell_script" "test" {
+  environment = {
+    "MY_VALUE" = "my-value"
+  }
+  os_commands = {
+    default = {
+      create = {
+        command = <<-EOF
+          set -euo pipefail
+          printf '{"value": "%s"}' "$${MY_VALUE}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          printf '{"value": "%s"}' "$${MY_VALUE}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          set -euo pipefail
+          printf '{"value": "%s"}' "$${MY_VALUE}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      delete = {
+        command = ""
+      }
+    }
+    windows = {
+      create = {
+        command = <<-EOF
+          @{value=$env:MY_VALUE} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          @{value=$env:MY_VALUE} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          @{value=$env:MY_VALUE} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      delete = {
+        command = ""
+      }
+    }
+  }
+}
+`,
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"value": knownvalue.StringExact("my-value")})),
+					},
+				},
+			},
+		})
+	})
+
+	t.Run("create_with_inputs", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+resource "shell_script" "test" {
+  inputs = {
+    value = "my-value"
+  }
+  os_commands = {
+    default = {
+      create = {
+        command = <<-EOF
+          set -euo pipefail
+          value="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.value')"
+          printf '{"value": "%s"}' "$${value}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          value="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.value')"
+          printf '{"value": "%s"}' "$${value}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          set -euo pipefail
+          value="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.value')"
+          printf '{"value": "%s"}' "$${value}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      delete = {
+        command = ""
+      }
+    }
+    windows = {
+      create = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          @{value=$inputs.value} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          @{value=$inputs.value} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          @{value=$inputs.value} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      delete = {
+        command = ""
+      }
+    }
+  }
+}
+`,
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"value": knownvalue.StringExact("my-value")})),
 					},
 				},
 			},
@@ -197,191 +303,115 @@ resource "shell_script" "test" {
 
 		file := acctest.RandomWithPrefix("tf-script-test")
 		newFile := acctest.RandomWithPrefix("tf-script-test-new")
+		config := `
+resource "shell_script" "test" {
+  inputs = {
+    file_name = "%s"
+  }
+  os_commands = {
+    default = {
+      create = {
+        command = <<-EOF
+          set -euo pipefail
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
+          touch "$${path}"
+          printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
+          if [[ -f "$${path}" ]]; then
+            printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
+          else
+            printf '{"exists": false,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
+          fi
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          set -euo pipefail
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
+          old_path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
+          if [[ "$${path}" != "$${old_path}" ]] && [[ -f "$${old_path}" ]]; then
+            mv -f "$${old_path}" "$${path}"
+          else
+            touch "$${path}"
+          fi
+          printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+      delete = {
+        command = <<-EOF
+          set -euo pipefail
+          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          path="/tmp/$${file_name}"
+          rm -f "$${path}"
+        EOF
+      }
+    }
+    windows = {
+      create = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
+          New-Item -Path $path -ItemType File -Force
+          @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
+          if (Test-Path $path) {
+            @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          } else {
+            @{exists=$false; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          }
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
+          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
+          $oldPath = $state.path
+          if ($path -ne $oldPath) {
+            Move-Item -Path $oldPath -Destination $path -Force
+          } else {
+            New-Item -Path $path -ItemType File -Force
+          }
+          @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+      delete = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $path = "$env:TEMP\$inputs.file_name"
+          Remove-Item -Path $path -Force
+        EOF
+      }
+    }
+  }
+}
+`
 
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: fmt.Sprintf(`
-resource "shell_script" "test" {
-  environment = {
-    "TARGET_FILE" = "%s"
-  }
-  os_commands = {
-    default = {
-      create = {
-        command = <<-EOF
-          set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
-          touch "$${path}"
-          printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-        EOF
-      }
-      read = {
-        command = <<-EOF
-          set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
-          if [[ -f "$${path}" ]]; then
-            printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-          else
-            printf '{"exists": false,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-          fi
-        EOF
-      }
-      update = {
-        command = <<-EOF
-          set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
-          old_path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
-          if [[ "$${path}" != "$${old_path}" ]] && [[ -f "$${old_path}" ]]; then
-            rm -f "$${old_path}"
-          fi
-          touch "$${path}"
-          printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-        EOF
-      }
-      delete = {
-        command = <<-EOF
-          set -euo pipefail
-					path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
-          rm -f "$${path}"
-        EOF
-      }
-    }
-    windows = {
-      create = {
-        command = <<-EOF
-          $path = "$env:TEMP\$env:TARGET_FILE"
-          New-Item -Path $path -ItemType File -Force
-          @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-        EOF
-      }
-      read = {
-        command = <<-EOF
-          $path = "$env:TEMP\$env:TARGET_FILE"
-          if (Test-Path $path) {
-            @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          } else {
-            @{exists=$false; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          }
-        EOF
-      }
-      update = {
-        command = <<-EOF
-          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
-          $path = "$env:TEMP\$env:TARGET_FILE"
-          $oldPath = $state.path
-          if ($path -ne $oldPath) {
-            Remove-Item -Path $oldPath -Force
-          }
-          New-Item -Path $path -ItemType File -Force
-          @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-        EOF
-      }
-      delete = {
-        command = <<-EOF
-          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
-          $path = $state.path
-          Remove-Item -Path $path -Force
-        EOF
-      }
-    }
-  }
-}
-`, file),
+					Config: fmt.Sprintf(config, file),
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"path": knownvalue.StringRegexp(regexp.MustCompile(".+tf-script-test")), "exists": knownvalue.Bool(true)})),
 					},
 				},
 				{
-					Config: fmt.Sprintf(`
-resource "shell_script" "test" {
-  environment = {
-    "TARGET_FILE" = "%s"
-  }
-  os_commands = {
-    default = {
-      create = {
-        command = <<-EOF
-          set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
-          touch "$${path}"
-          printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-        EOF
-      }
-      read = {
-        command = <<-EOF
-          set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
-          if [[ -f "$${path}" ]]; then
-            printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-          else
-            printf '{"exists": false,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-          fi
-        EOF
-      }
-      update = {
-        command = <<-EOF
-          set -euo pipefail
-          path="/tmp/$${TARGET_FILE}"
-          old_path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
-          if [[ "$${path}" != "$${old_path}" ]] && [[ -f "$${old_path}" ]]; then
-            rm -f "$${old_path}"
-          fi
-          touch "$${path}"
-          printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
-        EOF
-      }
-      delete = {
-        command = <<-EOF
-          set -euo pipefail
-					path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
-          rm -f "$${path}"
-        EOF
-      }
-    }
-    windows = {
-      create = {
-        command = <<-EOF
-          $path = "$env:TEMP\$env:TARGET_FILE"
-          New-Item -Path $path -ItemType File -Force
-          @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-        EOF
-      }
-      read = {
-        command = <<-EOF
-          $path = "$env:TEMP\$env:TARGET_FILE"
-          if (Test-Path $path) {
-            @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          } else {
-            @{exists=$false; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          }
-        EOF
-      }
-      update = {
-        command = <<-EOF
-          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
-          $path = "$env:TEMP\$env:TARGET_FILE"
-          $oldPath = $state.path
-          if ($path -ne $oldPath) {
-            Remove-Item -Path $oldPath -Force
-          }
-          New-Item -Path $path -ItemType File -Force
-          @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-        EOF
-      }
-      delete = {
-        command = <<-EOF
-          $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
-          $path = $state.path
-          Remove-Item -Path $path -Force
-        EOF
-      }
-    }
-  }
-}
-`, newFile),
+					Config: fmt.Sprintf(config, newFile),
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"path": knownvalue.StringRegexp(regexp.MustCompile(".+tf-script-test-new")), "exists": knownvalue.Bool(true)})),
 					},
@@ -393,51 +423,39 @@ resource "shell_script" "test" {
 	t.Run("log_output", func(t *testing.T) {
 		t.Parallel()
 
-		file := acctest.RandomWithPrefix("tf-script-test")
-
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: fmt.Sprintf(`
+					Config: `
 resource "shell_script" "test" {
-  environment = {
-    "TARGET_FILE" = "%s"
-  }
   os_commands = {
     default = {
       create = {
         command = <<-EOF
           set -euo pipefail
-          touch "/tmp/$${TARGET_FILE}"
-          printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
           echo "[INFO] create"
+          printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       read = {
         command = <<-EOF
           set -euo pipefail
-          if [[ -f "/tmp/$${TARGET_FILE}" ]]; then
-            printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
-          else
-            printf '{"exists": false}' > "$${TF_SCRIPT_OUTPUT}"
-          fi
           echo "[INFO] read"
+          printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       update = {
         command = <<-EOF
           set -euo pipefail
-          touch "/tmp/$${TARGET_FILE}"
-          printf '{"exists": true}' > "$${TF_SCRIPT_OUTPUT}"
           echo "[INFO] update"
+          printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
       delete = {
         command = <<-EOF
           set -euo pipefail
-          rm -f "/tmp/$${TARGET_FILE}"
           echo "[INFO] delete"
         EOF
       }
@@ -445,40 +463,33 @@ resource "shell_script" "test" {
     windows = {
       create = {
         command = <<-EOF
-          New-Item -Path "$env:TEMP\$env:TARGET_FILE" -ItemType File -Force
-          '{"exists": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
           Write-Output "[INFO] create"
+          '{"run": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       read = {
         command = <<-EOF
-          if (Test-Path "$env:TEMP\$env:TARGET_FILE") {
-            '{"exists": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          } else {
-            '{"exists": false}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-          }
           Write-Output "[INFO] read"
+          '{"run": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       update = {
         command = <<-EOF
-          New-Item -Path "$env:TEMP\$env:TARGET_FILE" -ItemType File -Force
-          '{"exists": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
           Write-Output "[INFO] update"
+          '{"run": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
       delete = {
         command = <<-EOF
-          Remove-Item -Path "$env:TEMP\$env:TARGET_FILE" -Force -ErrorAction SilentlyContinue
           Write-Output "[INFO] delete"
         EOF
       }
     }
   }
 }
-`, file),
+`,
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"exists": knownvalue.Bool(true)})),
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"run": knownvalue.Bool(true)})),
 					},
 				},
 			},

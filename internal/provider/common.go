@@ -13,10 +13,11 @@ import (
 )
 
 const (
+	LifecycleEnv            string = "TF_SCRIPT_LIFECYCLE"
+	InputsEnv               string = "TF_SCRIPT_INPUTS"
+	StateOutputEnv          string = "TF_SCRIPT_STATE_OUTPUT"
 	ScriptOutputFilePathEnv string = "TF_SCRIPT_OUTPUT"
 	ScriptErrorFilePathEnv  string = "TF_SCRIPT_ERROR"
-	StateOutputEnv          string = "TF_SCRIPT_STATE_OUTPUT"
-	LifecycleEnv            string = "TF_SCRIPT_LIFECYCLE"
 )
 
 type TFLifecycle string
@@ -29,7 +30,7 @@ const (
 )
 
 // runCommand runs a shell script and returns the output.
-func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, lifecycle TFLifecycle, stateOutput any, readJSON bool) (any, diag.Diagnostics) {
+func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, lifecycle TFLifecycle, inputs, stateOutput any, readJSON bool) (any, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	var interpreter []string
@@ -69,6 +70,16 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 	environment[LifecycleEnv] = string(lifecycle)
 	environment[ScriptOutputFilePathEnv] = outFilePath
 	environment[ScriptErrorFilePathEnv] = errorFilePath
+
+	if inputs != nil {
+		by, err := json.Marshal(inputs)
+		if err != nil {
+			diags.AddError("Failed to marshal inputs.", err.Error())
+			return nil, diags
+		}
+
+		environment[InputsEnv] = string(by)
+	}
 
 	if stateOutput != nil {
 		by, err := json.Marshal(stateOutput)

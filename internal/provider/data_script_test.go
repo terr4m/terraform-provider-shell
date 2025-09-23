@@ -14,8 +14,12 @@ import (
 func TestAccScriptDataSource(t *testing.T) {
 	t.Parallel()
 
-	t.Run("read", func(t *testing.T) {
+	t.Run("read_default", func(t *testing.T) {
 		t.Parallel()
+
+		if runtime.GOOS == "windows" {
+			t.Skip("skipping test on windows platform")
+		}
 
 		resource.Test(t, resource.TestCase{
 			PreCheck:                 func() { testAccPreCheck(t) },
@@ -33,16 +37,6 @@ data "shell_script" "test" {
         EOF
       }
     }
-    windows = {
-      read = {
-        command = <<-EOF
-          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
-          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First 4
-          $latest = $sorted | ForEach-Object { $_.latest }
-          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
-        EOF
-      }
-    }
   }
 }
 `,
@@ -55,7 +49,7 @@ data "shell_script" "test" {
 		})
 	})
 
-	t.Run("read_os_script", func(t *testing.T) {
+	t.Run("read_os", func(t *testing.T) {
 		t.Parallel()
 
 		resource.Test(t, resource.TestCase{
@@ -100,7 +94,7 @@ data "shell_script" "test" {
 		})
 	})
 
-	t.Run("read_with_ignored_output", func(t *testing.T) {
+	t.Run("read_with_ignored_stdout", func(t *testing.T) {
 		t.Parallel()
 
 		resource.Test(t, resource.TestCase{
@@ -216,6 +210,53 @@ data "shell_script" "test" {
         command = <<-EOF
           $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
           $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First $env:TF_VERSION_COUNT
+          $latest = $sorted | ForEach-Object { $_.latest }
+          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
+    }
+  }
+}
+`,
+
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(3)),
+					},
+				},
+			},
+		})
+	})
+
+	t.Run("read_with_inputs", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+data "shell_script" "test" {
+  inputs = {
+    version_count = 3
+  }
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          version_count="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.version_count')"
+          curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${version_count}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+    windows = {
+      read = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
+          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First $inputs.version_count
           $latest = $sorted | ForEach-Object { $_.latest }
           $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF

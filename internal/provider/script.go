@@ -33,6 +33,7 @@ type ScriptResource struct {
 type ScriptResourceModel struct {
 	Environment      types.Map      `tfsdk:"environment"`
 	WorkingDirectory types.String   `tfsdk:"working_directory"`
+	Inputs           types.Dynamic  `tfsdk:"inputs"`
 	OSCommands       types.Map      `tfsdk:"os_commands"`
 	Output           types.Dynamic  `tfsdk:"output"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
@@ -61,7 +62,7 @@ func (d *ScriptResource) Metadata(ctx context.Context, req resource.MetadataRequ
 func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. You can access the state output value in in the read, update and delete commands via the `TF_SCRIPT_STATE_OUTPUT` environment variable. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.",
+		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.",
 		Attributes: map[string]schema.Attribute{
 			"environment": schema.MapAttribute{
 				Description:         "The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.",
@@ -72,6 +73,11 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			"working_directory": schema.StringAttribute{
 				Description:         "The working directory to use when executing the commands; this will default to the Terraform working directory.",
 				MarkdownDescription: "The working directory to use when executing the commands; this will default to the _Terraform_ working directory.",
+				Optional:            true,
+			},
+			"inputs": schema.DynamicAttribute{
+				Description:         "Inputs to be made available to the script.",
+				MarkdownDescription: "Inputs to be made available to the script; these can be accessed as JSON via the `TF_SCRIPT_INPUTS` environment variable.",
 				Optional:            true,
 			},
 			"os_commands": schema.MapNestedAttribute{
@@ -157,7 +163,7 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"output": schema.DynamicAttribute{
 				Description:         "The output of the script as a structured type.",
-				MarkdownDescription: "The output of the script as a structured type.",
+				MarkdownDescription: "The output of the script as a structured type; this can be accessed in the read, update and delete commands as JSON via the `TF_SCRIPT_STATE_OUTPUT` environment variable.",
 				Computed:            true,
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
@@ -191,13 +197,13 @@ func (r *ScriptResource) Configure(ctx context.Context, req resource.ConfigureRe
 
 // Create creates the resource.
 func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var data ScriptResourceModel
-	if resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...); resp.Diagnostics.HasError() {
+	var plan ScriptResourceModel
+	if resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...); resp.Diagnostics.HasError() {
 		return
 	}
 
 	var commands map[string]CRUDCommandsModel
-	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+	if resp.Diagnostics.Append(plan.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -207,15 +213,21 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 		command = commands["default"]
 	}
 
-	timeout, diags := data.Timeouts.Create(ctx, r.providerData.DefaultTimeouts.Create)
+	timeout, diags := plan.Timeouts.Create(ctx, r.providerData.DefaultTimeouts.Create)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	inputs, err := tfdynamic.EncodeDynamic(ctx, plan.Inputs)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the inputs.", err.Error())
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, command.Create.Interpreter, data.Environment, data.WorkingDirectory, command.Create.Command, TFLifecycleCreate, nil, true)
+	raw, diags := runCommand(ctx, r.providerData, command.Create.Interpreter, plan.Environment, plan.WorkingDirectory, command.Create.Command, TFLifecycleCreate, inputs, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -225,20 +237,20 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data.Output = out
+	plan.Output = out
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 // Read reads the resource state.
 func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var data ScriptResourceModel
-	if resp.Diagnostics.Append(req.State.Get(ctx, &data)...); resp.Diagnostics.HasError() {
+	var state ScriptResourceModel
+	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
 
 	var commands map[string]CRUDCommandsModel
-	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+	if resp.Diagnostics.Append(state.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -248,17 +260,18 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 		command = commands["default"]
 	}
 
-	timeout, diags := data.Timeouts.Read(ctx, r.providerData.DefaultTimeouts.Read)
+	timeout, diags := state.Timeouts.Read(ctx, r.providerData.DefaultTimeouts.Read)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	var stateData ScriptResourceModel
-	if resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...); resp.Diagnostics.HasError() {
+	inputs, err := tfdynamic.EncodeDynamic(ctx, state.Inputs)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the inputs.", err.Error())
 		return
 	}
 
-	stateOutput, err := tfdynamic.EncodeDynamic(ctx, stateData.Output)
+	stateOutput, err := tfdynamic.EncodeDynamic(ctx, state.Output)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to encode the state output.", err.Error())
 		return
@@ -267,7 +280,7 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, stateOutput, true)
+	raw, diags := runCommand(ctx, r.providerData, command.Read.Interpreter, state.Environment, state.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -277,20 +290,20 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data.Output = out
+	state.Output = out
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 // Update updates the resource.
 func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var data ScriptResourceModel
-	if resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...); resp.Diagnostics.HasError() {
+	var plan ScriptResourceModel
+	if resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...); resp.Diagnostics.HasError() {
 		return
 	}
 
 	var commands map[string]CRUDCommandsModel
-	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+	if resp.Diagnostics.Append(plan.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -300,17 +313,23 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 		command = commands["default"]
 	}
 
-	timeout, diags := data.Timeouts.Update(ctx, r.providerData.DefaultTimeouts.Update)
+	timeout, diags := plan.Timeouts.Update(ctx, r.providerData.DefaultTimeouts.Update)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	var stateData ScriptResourceModel
-	if resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...); resp.Diagnostics.HasError() {
+	inputs, err := tfdynamic.EncodeDynamic(ctx, plan.Inputs)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the inputs.", err.Error())
 		return
 	}
 
-	stateOutput, err := tfdynamic.EncodeDynamic(ctx, stateData.Output)
+	var state ScriptResourceModel
+	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	stateOutput, err := tfdynamic.EncodeDynamic(ctx, state.Output)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to encode the state output.", err.Error())
 		return
@@ -319,7 +338,7 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, command.Update.Interpreter, data.Environment, data.WorkingDirectory, command.Update.Command, TFLifecycleUpdate, stateOutput, true)
+	raw, diags := runCommand(ctx, r.providerData, command.Update.Interpreter, plan.Environment, plan.WorkingDirectory, command.Update.Command, TFLifecycleUpdate, inputs, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -329,20 +348,20 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	data.Output = out
+	plan.Output = out
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 // Delete deletes the resource.
 func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var data ScriptResourceModel
-	if resp.Diagnostics.Append(req.State.Get(ctx, &data)...); resp.Diagnostics.HasError() {
+	var state ScriptResourceModel
+	if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
 		return
 	}
 
 	var commands map[string]CRUDCommandsModel
-	if resp.Diagnostics.Append(data.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+	if resp.Diagnostics.Append(state.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -352,17 +371,18 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		command = commands["default"]
 	}
 
-	timeout, diags := data.Timeouts.Delete(ctx, r.providerData.DefaultTimeouts.Delete)
+	timeout, diags := state.Timeouts.Delete(ctx, r.providerData.DefaultTimeouts.Delete)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	var stateData ScriptResourceModel
-	if resp.Diagnostics.Append(req.State.Get(ctx, &stateData)...); resp.Diagnostics.HasError() {
+	inputs, err := tfdynamic.EncodeDynamic(ctx, state.Inputs)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the inputs.", err.Error())
 		return
 	}
 
-	stateOutput, err := tfdynamic.EncodeDynamic(ctx, stateData.Output)
+	stateOutput, err := tfdynamic.EncodeDynamic(ctx, state.Output)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to encode the state output.", err.Error())
 		return
@@ -371,7 +391,7 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	_, diags = runCommand(ctx, r.providerData, command.Delete.Interpreter, data.Environment, data.WorkingDirectory, command.Delete.Command, TFLifecycleDelete, stateOutput, false)
+	_, diags = runCommand(ctx, r.providerData, command.Delete.Interpreter, state.Environment, state.WorkingDirectory, command.Delete.Command, TFLifecycleDelete, inputs, stateOutput, false)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}

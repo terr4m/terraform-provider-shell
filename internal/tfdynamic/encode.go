@@ -14,7 +14,7 @@ func EncodeDynamic(ctx context.Context, d types.Dynamic) (any, error) {
 		return nil, fmt.Errorf("underlying value is unknown")
 	}
 
-	if d.IsUnderlyingValueNull() {
+	if d.IsNull() || d.IsUnderlyingValueNull() {
 		return nil, nil
 	}
 

@@ -31,6 +31,7 @@ type ScriptDataSource struct {
 type ScriptDataSourceModel struct {
 	Environment      types.Map      `tfsdk:"environment"`
 	WorkingDirectory types.String   `tfsdk:"working_directory"`
+	Inputs           types.Dynamic  `tfsdk:"inputs"`
 	OSCommands       types.Map      `tfsdk:"os_commands"`
 	Output           types.Dynamic  `tfsdk:"output"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
@@ -60,7 +61,12 @@ func (d *ScriptDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 			},
 			"working_directory": schema.StringAttribute{
 				Description:         "The working directory to use when executing the command; this will default to the Terraform working directory.",
-				MarkdownDescription: "The working directory to use when executing the command; this will default to the _Terraform_ working directory..",
+				MarkdownDescription: "The working directory to use when executing the command; this will default to the _Terraform_ working directory.",
+				Optional:            true,
+			},
+			"inputs": schema.DynamicAttribute{
+				Description:         "Inputs to be made available to the script.",
+				MarkdownDescription: "Inputs to be made available to the script; these can be accessed as JSON via the `TF_SCRIPT_INPUTS` environment variable.",
 				Optional:            true,
 			},
 			"os_commands": schema.MapNestedAttribute{
@@ -141,10 +147,16 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 		return
 	}
 
+	inputs, err := tfdynamic.EncodeDynamic(ctx, data.Inputs)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to encode the inputs.", err.Error())
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, d.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, nil, true)
+	raw, diags := runCommand(ctx, d.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
