@@ -9,6 +9,17 @@ description: |-
 
 The _Shell_ script data source (`shell_script`) allows you to execute an arbitrary command as the read part of a _Terraform_ lifecycle. The script must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If the script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.
 
+## Environment Variables
+
+The following environment variables provide the shell script integration with the provider.
+
+| **Name** | **Description** |
+| :--- | :--- |
+| `TF_SCRIPT_LIFECYCLE` | The current lifecycle that triggered the script; this will always be `read`. |
+| `TF_SCRIPT_INPUTS` | The values passed into the data source `inputs` as JSON. |
+| `TF_SCRIPT_OUTPUT` | Path to the file where the script output must be written; the output must be valid JSON. |
+| `TF_SCRIPT_ERROR` | Path to a file which will be read as the error diagnostics if the scripts exits with a non-zero code. |
+
 ## Example Usage
 
 ```terraform
