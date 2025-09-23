@@ -1,6 +1,8 @@
 {
   "go.testEnvVars": {
     "TF_ACC": "1",
+    "TF_ACC_PROVIDER_NAMESPACE": "terr4m",
+    "TF_ACC_TERRAFORM_PATH": "C:\\Users\\hipwells\\scoop\\apps\\terraform\\current\\terraform.exe",
   },
   "go.testTimeout": "1m",
 }
