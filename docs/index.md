@@ -9,14 +9,16 @@ description: |-
 
 The _Shell_ provider allows you to execute arbitrary shell scripts and parse their JSON output for use in your _Terraform_ configurations. This is particularly useful for running scripts that interact with external APIs, or other systems that don't have a native _Terraform_ provider, or for performing complex data transformations.
 
-## Environment Variables
+## Features
 
-The _Shell_ provider uses environment variables and files to enable communication between the provider code and the scripts that are being executed. The following environment variables are used by all resources and data sources:
+This provider offers the following features.
 
-| **Name** | **Description** |
-| :--- | :--- |
-| `TF_SCRIPT_LIFECYCLE` | The current lifecycle that triggered the script; this can be one of `create`, `read`, `update`, or `delete`. |
-| `TF_SCRIPT_OUTPUT` | The path to the file where the script output must be written; the output must be valid JSON. |
+- Configurable platform specific scripting environment
+- Strongly typed input variables
+- Strongly typed output value
+- Access to current state in scripts
+- Custom error details
+- Script logging
 
 ## Example Usage
 
@@ -25,7 +27,11 @@ provider "shell" {}
 
 data "shell_script" "example" {
   environment = {
-    "TARGET" = "my-resource"
+    MY_ENV_VAR = "my-value"
+  }
+
+  inputs = {
+    target = "my-resource"
   }
 
   os_commands = {
@@ -44,7 +50,11 @@ data "shell_script" "example" {
 
 resource "shell_script" "example" {
   environment = {
-    "TARGET" = "my-resource"
+    MY_ENV_VAR = "my-value"
+  }
+
+  inputs = {
+    target = "my-resource"
   }
 
   os_commands = {

@@ -2,7 +2,11 @@ provider "shell" {}
 
 data "shell_script" "example" {
   environment = {
-    "TARGET" = "my-resource"
+    MY_ENV_VAR = "my-value"
+  }
+
+  inputs = {
+    target = "my-resource"
   }
 
   os_commands = {
@@ -21,7 +25,11 @@ data "shell_script" "example" {
 
 resource "shell_script" "example" {
   environment = {
-    "TARGET" = "my-resource"
+    MY_ENV_VAR = "my-value"
+  }
+
+  inputs = {
+    target = "my-resource"
   }
 
   os_commands = {
