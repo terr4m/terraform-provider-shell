@@ -2,7 +2,7 @@ module tools
 
 go 1.24.0
 
-require github.com/hashicorp/terraform-plugin-docs v0.23.0
+require github.com/hashicorp/terraform-plugin-docs v0.24.0
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -48,7 +48,7 @@ require (
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621 // indirect
 	golang.org/x/mod v0.28.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
