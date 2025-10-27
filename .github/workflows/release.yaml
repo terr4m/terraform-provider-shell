@@ -35,7 +35,7 @@ jobs:
           cache: false
 
       - name: Install Syft
-        uses: action-stars/install-tool-from-github-release@f2e83e089fa618aa7e9fd3452fbcf4fe1598ede2 # v0.2.5
+        uses: action-stars/install-tool-from-github-release@1fa61c3bea52eca3bcdb1f5c961a3b113fe7fa54 # v0.2.6
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           owner: anchore
