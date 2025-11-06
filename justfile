@@ -27,3 +27,9 @@ build:
 [working-directory: "tools"]
 docs:
   go generate ./...
+
+docs-fmt:
+  rumdl fmt --fix .
+
+docs-lint:
+  rumdl check .

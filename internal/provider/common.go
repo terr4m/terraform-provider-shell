@@ -23,20 +23,33 @@ const (
 type TFLifecycle string
 
 const (
+	TFLifecyclePlan   TFLifecycle = "plan"
 	TFLifecycleCreate TFLifecycle = "create"
 	TFLifecycleRead   TFLifecycle = "read"
 	TFLifecycleUpdate TFLifecycle = "update"
 	TFLifecycleDelete TFLifecycle = "delete"
 )
 
+// runCommandResult represents the result of running a command.
+type runCommandResult struct {
+	Meta   runCommandResultMetadata
+	Output any
+}
+
+// runCommandResultMetadata represents metadata from running a command.
+type runCommandResultMetadata struct {
+	OutputDriftDetected bool `json:"output_drift_detected"`
+}
+
 // runCommand runs a shell script and returns the output.
-func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, lifecycle TFLifecycle, inputs, stateOutput any, readJSON bool) (any, diag.Diagnostics) {
+func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpreter types.List, tfEnvironment types.Map, tfWorkingDirectory, tfCommand types.String, lifecycle TFLifecycle, inputs, stateOutput any, readJSON bool) (runCommandResult, diag.Diagnostics) {
 	var diags diag.Diagnostics
+	var res runCommandResult
 
 	var interpreter []string
 	if !tfInterpreter.IsNull() {
 		if diags.Append(tfInterpreter.ElementsAs(ctx, &interpreter, false)...); diags.HasError() {
-			return nil, diags
+			return res, diags
 		}
 	} else {
 		interpreter = providerData.DefaultInterpreter
@@ -49,21 +62,21 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 
 	if !tfEnvironment.IsNull() {
 		if diags.Append(tfEnvironment.ElementsAs(ctx, &environment, false)...); diags.HasError() {
-			return nil, diags
+			return res, diags
 		}
 	}
 
 	outFilePath, err := shell.GetOutFilePath()
 	if err != nil {
 		diags.AddError("Failed to get output file path.", err.Error())
-		return nil, diags
+		return res, diags
 	}
 	defer os.Remove(outFilePath)
 
 	errorFilePath, err := shell.GetErrorFilePath()
 	if err != nil {
 		diags.AddError("Failed to get error file path.", err.Error())
-		return nil, diags
+		return res, diags
 	}
 	defer os.Remove(errorFilePath)
 
@@ -75,7 +88,7 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 		by, err := json.Marshal(inputs)
 		if err != nil {
 			diags.AddError("Failed to marshal inputs.", err.Error())
-			return nil, diags
+			return res, diags
 		}
 
 		environment[InputsEnv] = string(by)
@@ -85,7 +98,7 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 		by, err := json.Marshal(stateOutput)
 		if err != nil {
 			diags.AddError("Failed to marshal state output.", err.Error())
-			return nil, diags
+			return res, diags
 		}
 
 		environment[StateOutputEnv] = string(by)
@@ -107,22 +120,45 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 				detail = string(by)
 			}
 			diags.AddError(fmt.Sprintf("Command failed with exit code: %d", exitError.ExitCode()), detail)
-			return nil, diags
+			return res, diags
 		}
 
 		diags.AddError("Failed to run command.", err.Error())
-		return nil, diags
+		return res, diags
 	}
 
 	if !readJSON {
-		return nil, diags
+		return res, diags
 	}
 
-	a, err := shell.ReadOutJSON(outFilePath)
+	out, err := shell.ReadJSON(outFilePath)
 	if err != nil {
 		diags.AddError("Failed to read output file.", err.Error())
-		return nil, diags
+		return res, diags
 	}
 
-	return a, diags
+	res = getRunCommandResult(out)
+
+	return res, diags
+}
+
+// getRunCommandResult extracts the runCommandResult from the output.
+func getRunCommandResult(o any) runCommandResult {
+	if om, ok := o.(map[string]any); ok {
+		if m, ok := om["__meta"].(map[string]any); ok {
+			meta := runCommandResultMetadata{}
+			if outputDriftDetected, ok := m["output_drift_detected"].(bool); ok {
+				meta.OutputDriftDetected = outputDriftDetected
+			}
+			delete(om, "__meta")
+			return runCommandResult{
+				Meta:   meta,
+				Output: om,
+			}
+		}
+	}
+
+	return runCommandResult{
+		Output: o,
+	}
 }

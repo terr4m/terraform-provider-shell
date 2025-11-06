@@ -32,7 +32,7 @@ func TestGetErrorFilePath(t *testing.T) {
 	}
 }
 
-func TestReadOutJSON(t *testing.T) {
+func TestReadJSON(t *testing.T) {
 	t.Parallel()
 
 	for _, d := range []struct {
@@ -75,7 +75,7 @@ func TestReadOutJSON(t *testing.T) {
 		t.Run(d.testName, func(t *testing.T) {
 			t.Parallel()
 
-			raw, err := ReadOutJSON(d.path)
+			raw, err := ReadJSON(d.path)
 
 			if !reflect.DeepEqual(raw, d.expected) {
 				t.Errorf("expected %v, got %v", d.expected, raw)

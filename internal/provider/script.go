@@ -6,18 +6,27 @@ import (
 	"runtime"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/boolvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/dynamicplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/terr4m/terraform-provider-shell/internal/tfdynamic"
 )
 
 var (
-	_ resource.Resource              = &ScriptResource{}
-	_ resource.ResourceWithConfigure = &ScriptResource{}
+	_ resource.Resource                   = &ScriptResource{}
+	_ resource.ResourceWithConfigure      = &ScriptResource{}
+	_ resource.ResourceWithValidateConfig = &ScriptResource{}
+	_ resource.ResourceWithModifyPlan     = &ScriptResource{}
 )
+
+// defaultCommandsKey is the key in the os_commands map for the default commands.
+const defaultCommandsKey = "default"
 
 // NewScriptResource creates a new resource resource.
 func NewScriptResource() resource.Resource {
@@ -36,15 +45,18 @@ type ScriptResourceModel struct {
 	Inputs           types.Dynamic  `tfsdk:"inputs"`
 	OSCommands       types.Map      `tfsdk:"os_commands"`
 	Output           types.Dynamic  `tfsdk:"output"`
+	OutputDrift      types.Bool     `tfsdk:"output_drift"`
+	Triggers         types.Dynamic  `tfsdk:"triggers"`
 	Timeouts         timeouts.Value `tfsdk:"timeouts"`
 }
 
 // CRUDCommandsModel describes a set of CRUD commands.
 type CRUDCommandsModel struct {
-	Create CommandModel `tfsdk:"create"`
-	Read   CommandModel `tfsdk:"read"`
-	Update CommandModel `tfsdk:"update"`
-	Delete CommandModel `tfsdk:"delete"`
+	Plan   *CommandModel `tfsdk:"plan"`
+	Create CommandModel  `tfsdk:"create"`
+	Read   CommandModel  `tfsdk:"read"`
+	Update CommandModel  `tfsdk:"update"`
+	Delete CommandModel  `tfsdk:"delete"`
 }
 
 // CommandModel describes an interpreter and a command string.
@@ -86,6 +98,24 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Required:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
+						"plan": schema.SingleNestedAttribute{
+							MarkdownDescription: "The plan command configuration, this can be used to customize the plan phase of the Terraform lifecycle.",
+							Optional:            true,
+							Attributes: map[string]schema.Attribute{
+								"interpreter": schema.ListAttribute{
+									MarkdownDescription: "The interpreter to use for executing the plan command; if not set the platform default interpreter will be used.",
+									ElementType:         types.StringType,
+									Optional:            true,
+									Validators: []validator.List{
+										listvalidator.SizeAtLeast(1),
+									},
+								},
+								"command": schema.StringAttribute{
+									MarkdownDescription: "The plan command to execute.",
+									Required:            true,
+								},
+							},
+						},
 						"create": schema.SingleNestedAttribute{
 							MarkdownDescription: "The create command configuration.",
 							Required:            true,
@@ -166,6 +196,22 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The output of the script as a structured type; this can be accessed in the read, update and delete commands as JSON via the `TF_SCRIPT_STATE_OUTPUT` environment variable.",
 				Computed:            true,
 			},
+			"output_drift": schema.BoolAttribute{
+				Description:         "This is used by the provider to manage the output state and must always be set to false.",
+				MarkdownDescription: "This is used by the provider to manage the output state and must always be set to false.",
+				Required:            true,
+				Validators: []validator.Bool{
+					boolvalidator.Equals(false),
+				},
+			},
+			"triggers": schema.DynamicAttribute{
+				Description:         "Allows specifying values that trigger resource replacement when changed.",
+				MarkdownDescription: "Allows specifying values that trigger resource replacement when changed.",
+				Optional:            true,
+				PlanModifiers: []planmodifier.Dynamic{
+					dynamicplanmodifier.RequiresReplace(),
+				},
+			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{
 				Create:            true,
 				CreateDescription: "Timeout for creating the resource; this defaults to the provider value if not set. This should be a string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as `30s` or `2h45m`. Valid time units are `s` (seconds), `m` (minutes), `h` (hours).",
@@ -195,6 +241,101 @@ func (r *ScriptResource) Configure(ctx context.Context, req resource.ConfigureRe
 	r.providerData = providerData
 }
 
+// ValidateConfig validates the resource config.
+func (r *ScriptResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var conf ScriptResourceModel
+	if resp.Diagnostics.Append(req.Config.Get(ctx, &conf)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var commands map[string]CRUDCommandsModel
+	if resp.Diagnostics.Append(conf.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	_, ok := commands[defaultCommandsKey]
+	if !ok {
+		resp.Diagnostics.AddAttributeError(path.Root("os_commands").AtMapKey(defaultCommandsKey), "Default commands are required.", "expected default to be set in os_commands")
+		return
+	}
+}
+
+// ModifyPlan modifies the resource plan.
+func (r *ScriptResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan ScriptResourceModel
+	if resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var osCommands map[string]CRUDCommandsModel
+	if resp.Diagnostics.Append(plan.OSCommands.ElementsAs(ctx, &osCommands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var commands CRUDCommandsModel
+	commands, ok := osCommands[runtime.GOOS]
+	if !ok {
+		commands = osCommands[defaultCommandsKey]
+	}
+
+	if commands.Plan == nil {
+		if !plan.OutputDrift.ValueBool() {
+			return
+		}
+
+		plan.Output = types.DynamicUnknown()
+	} else {
+
+		timeout, diags := plan.Timeouts.Read(ctx, r.providerData.DefaultTimeouts.Read)
+		if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+			return
+		}
+
+		inputs, err := tfdynamic.EncodeDynamic(ctx, plan.Inputs)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to encode the inputs.", err.Error())
+			return
+		}
+
+		var stateOutput any
+		if !req.State.Raw.IsNull() {
+			var state ScriptResourceModel
+			if resp.Diagnostics.Append(req.State.Get(ctx, &state)...); resp.Diagnostics.HasError() {
+				return
+			}
+
+			stateOutput, err = tfdynamic.EncodeDynamic(ctx, state.Output)
+			if err != nil {
+				resp.Diagnostics.AddError("Failed to encode the state output.", err.Error())
+				return
+			}
+		}
+
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		res, diags := runCommand(ctx, r.providerData, commands.Plan.Interpreter, plan.Environment, plan.WorkingDirectory, commands.Plan.Command, TFLifecyclePlan, inputs, stateOutput, true)
+		if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+			return
+		}
+
+		out, diags := tfdynamic.Decode(ctx, res.Output)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		plan.Output = out
+	}
+
+	plan.OutputDrift = types.BoolValue(false)
+
+	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
+}
+
 // Create creates the resource.
 func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan ScriptResourceModel
@@ -210,7 +351,7 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 	var command CRUDCommandsModel
 	command, ok := commands[runtime.GOOS]
 	if !ok {
-		command = commands["default"]
+		command = commands[defaultCommandsKey]
 	}
 
 	timeout, diags := plan.Timeouts.Create(ctx, r.providerData.DefaultTimeouts.Create)
@@ -227,12 +368,12 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, command.Create.Interpreter, plan.Environment, plan.WorkingDirectory, command.Create.Command, TFLifecycleCreate, inputs, nil, true)
+	res, diags := runCommand(ctx, r.providerData, command.Create.Interpreter, plan.Environment, plan.WorkingDirectory, command.Create.Command, TFLifecycleCreate, inputs, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	out, diags := tfdynamic.Decode(ctx, raw)
+	out, diags := tfdynamic.Decode(ctx, res.Output)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -257,7 +398,7 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 	var command CRUDCommandsModel
 	command, ok := commands[runtime.GOOS]
 	if !ok {
-		command = commands["default"]
+		command = commands[defaultCommandsKey]
 	}
 
 	timeout, diags := state.Timeouts.Read(ctx, r.providerData.DefaultTimeouts.Read)
@@ -280,17 +421,18 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, command.Read.Interpreter, state.Environment, state.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, stateOutput, true)
+	res, diags := runCommand(ctx, r.providerData, command.Read.Interpreter, state.Environment, state.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	out, diags := tfdynamic.Decode(ctx, raw)
+	out, diags := tfdynamic.Decode(ctx, res.Output)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	state.Output = out
+	state.OutputDrift = types.BoolValue(res.Meta.OutputDriftDetected)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -310,7 +452,7 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 	var command CRUDCommandsModel
 	command, ok := commands[runtime.GOOS]
 	if !ok {
-		command = commands["default"]
+		command = commands[defaultCommandsKey]
 	}
 
 	timeout, diags := plan.Timeouts.Update(ctx, r.providerData.DefaultTimeouts.Update)
@@ -338,17 +480,18 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, r.providerData, command.Update.Interpreter, plan.Environment, plan.WorkingDirectory, command.Update.Command, TFLifecycleUpdate, inputs, stateOutput, true)
+	res, diags := runCommand(ctx, r.providerData, command.Update.Interpreter, plan.Environment, plan.WorkingDirectory, command.Update.Command, TFLifecycleUpdate, inputs, stateOutput, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	out, diags := tfdynamic.Decode(ctx, raw)
+	out, diags := tfdynamic.Decode(ctx, res.Output)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	plan.Output = out
+	plan.OutputDrift = types.BoolValue(false)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -368,7 +511,7 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	var command CRUDCommandsModel
 	command, ok := commands[runtime.GOOS]
 	if !ok {
-		command = commands["default"]
+		command = commands[defaultCommandsKey]
 	}
 
 	timeout, diags := state.Timeouts.Delete(ctx, r.providerData.DefaultTimeouts.Delete)

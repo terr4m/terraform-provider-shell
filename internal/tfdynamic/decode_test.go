@@ -14,9 +14,11 @@ func TestDecode(t *testing.T) {
 
 	emptyObject, _ := types.ObjectValue(map[string]attr.Type{}, map[string]attr.Value{})
 	simpleObject, _ := types.ObjectValue(map[string]attr.Type{"foo": types.StringType}, map[string]attr.Value{"foo": types.StringValue("bar")})
+	unknownObject, _ := types.ObjectValue(map[string]attr.Type{"foo": types.StringType, "baz": types.DynamicType}, map[string]attr.Value{"foo": types.StringValue("bar"), "baz": types.DynamicUnknown()})
 
 	emptyTuple, _ := types.TupleValue([]attr.Type{}, []attr.Value{})
 	stringTuple, _ := types.TupleValue([]attr.Type{types.StringType, types.StringType}, []attr.Value{types.StringValue("foo"), types.StringValue("bar")})
+	unknownTuple, _ := types.TupleValue([]attr.Type{types.StringType, types.StringType, types.DynamicType}, []attr.Value{types.StringValue("foo"), types.StringValue("bar"), types.DynamicUnknown()})
 
 	for _, d := range []struct {
 		testName string
@@ -61,6 +63,12 @@ func TestDecode(t *testing.T) {
 			errMsg:   "",
 		},
 		{
+			testName: "string_unknown",
+			obj:      "???",
+			expected: types.DynamicUnknown(),
+			errMsg:   "",
+		},
+		{
 			testName: "object_empty",
 			obj:      map[string]any{},
 			expected: types.DynamicValue(emptyObject),
@@ -69,6 +77,12 @@ func TestDecode(t *testing.T) {
 			testName: "object_simple",
 			obj:      map[string]any{"foo": "bar"},
 			expected: types.DynamicValue(simpleObject),
+			errMsg:   "",
+		},
+		{
+			testName: "object_with_unknown",
+			obj:      map[string]any{"foo": "bar", "baz": "???"},
+			expected: types.DynamicValue(unknownObject),
 			errMsg:   "",
 		},
 		{
@@ -83,6 +97,12 @@ func TestDecode(t *testing.T) {
 			expected: types.DynamicValue(stringTuple),
 			errMsg:   "",
 		},
+		{
+			testName: "array_with_unknown",
+			obj:      []any{"foo", "bar", "???"},
+			expected: types.DynamicValue(unknownTuple),
+			errMsg:   "",
+		},
 		//[]any{map[string]any{"foo": "bar"}, map[string]any{"foo": "baz"}}
 	} {
 		t.Run(d.testName, func(t *testing.T) {
@@ -92,13 +112,13 @@ func TestDecode(t *testing.T) {
 
 			dyn, diags := Decode(ctx, d.obj)
 
-			if !dyn.Equal(d.expected) {
-				// if !reflect.DeepEqual(dyn.UnderlyingValue(), d.expected.UnderlyingValue()) {
-				t.Errorf("expected %v, got %v", d.expected, dyn)
-			}
+			if len(d.errMsg) > 0 {
+				if !diags.HasError() {
+					t.Errorf("expected error message %s, got none", d.errMsg)
+					return
+				}
 
-			var errMsg string
-			if diags.HasError() {
+				var errMsg string
 				for i, diag := range diags.Errors() {
 					if i == 0 {
 						errMsg = diag.Summary()
@@ -106,10 +126,15 @@ func TestDecode(t *testing.T) {
 					}
 					errMsg = fmt.Sprintf("%s: %s", errMsg, diag.Summary())
 				}
+
+				if errMsg != d.errMsg {
+					t.Errorf("expected error message %s, got %s", d.errMsg, errMsg)
+					return
+				}
 			}
 
-			if errMsg != d.errMsg {
-				t.Errorf("expected error message %s, got %s", d.errMsg, errMsg)
+			if !dyn.Equal(d.expected) {
+				t.Errorf("expected %v, got %v", d.expected, dyn)
 			}
 		})
 	}

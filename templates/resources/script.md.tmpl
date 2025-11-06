@@ -21,6 +21,34 @@ The following environment variables provide the shell script integration with th
 | `TF_SCRIPT_ERROR` | Path to a file which will be read as the error diagnostics if the scripts exits with a non-zero code. |
 | `TF_SCRIPT_STATE_OUTPUT` | The current value of `output` in the state file, as JSON. |
 
+## Capabilities
+
+This resource supports the following capabilities to bring script functionality closer to native Terraform resources.
+
+### JSON Inputs
+
+Scripts receive input parameters as JSON via the `TF_SCRIPT_INPUTS` environment variable, simplifying data handling.
+
+### JSON Outputs
+
+Scripts must write their output as JSON to the file specified by the `TF_SCRIPT_OUTPUT` environment variable, ensuring structured data exchange. There is a special `__meta` key that can be used to provide additional metadata back to the provider.
+
+### Plan Customization
+
+Scripts can customize the plan phase of the Terraform lifecycle by providing a plan command configuration, allowing for more dynamic resource management. If the plan returns a `"???"` value for any `output` key this will be treated as a dynamic value that requires re-evaluation during the apply phase. This allows scripts to signal that certain outputs cannot be determined until the resource is actually created or updated.
+
+### Output Drift Detection
+
+If an update is required to correct the state of the `output` values, the read script can set the `output.__meta.output_drift_detected` key to `true`. This will allow the provider to set the `output_drift` attribute to `true` and trigger an update during the next apply.
+
+### State Awareness
+
+Scripts can access the current state output via the `TF_SCRIPT_STATE_OUTPUT` environment variable, allowing for more informed operations during updates or deletions.
+
+### Lifecycle Awareness
+
+By inspecting the `TF_SCRIPT_LIFECYCLE` environment variable, scripts can adapt their behavior based on the current lifecycle phase.
+
 {{ if .HasExample -}}
 ## Example Usage
 

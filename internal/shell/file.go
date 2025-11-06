@@ -7,6 +7,11 @@ import (
 	"os"
 )
 
+// GetMetaFilePath returns the path to the meta file.
+func GetMetaFilePath() (string, error) {
+	return getTempFile("tf-script-meta-*.json")
+}
+
 // GetOutFilePath returns the path to the output file.
 func GetOutFilePath() (string, error) {
 	return getTempFile("tf-script-output-*.json")
@@ -17,8 +22,8 @@ func GetErrorFilePath() (string, error) {
 	return getTempFile("tf-script-error-*")
 }
 
-// ReadOutJSON reads the output file as JSON and returns the contents.
-func ReadOutJSON(p string) (any, error) {
+// ReadJSON reads a file as JSON and returns the contents.
+func ReadJSON(p string) (any, error) {
 	f, err := os.Open(p)
 	if err != nil {
 		return nil, err
@@ -31,7 +36,7 @@ func ReadOutJSON(p string) (any, error) {
 	}
 
 	if !json.Valid(b) {
-		return nil, fmt.Errorf("output file is not valid JSON")
+		return nil, fmt.Errorf("file is not valid JSON")
 	}
 
 	var r any

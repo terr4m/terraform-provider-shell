@@ -21,6 +21,34 @@ The following environment variables provide the shell script integration with th
 | `TF_SCRIPT_ERROR` | Path to a file which will be read as the error diagnostics if the scripts exits with a non-zero code. |
 | `TF_SCRIPT_STATE_OUTPUT` | The current value of `output` in the state file, as JSON. |
 
+## Capabilities
+
+This resource supports the following capabilities to bring script functionality closer to native Terraform resources.
+
+### JSON Inputs
+
+Scripts receive input parameters as JSON via the `TF_SCRIPT_INPUTS` environment variable, simplifying data handling.
+
+### JSON Outputs
+
+Scripts must write their output as JSON to the file specified by the `TF_SCRIPT_OUTPUT` environment variable, ensuring structured data exchange. There is a special `__meta` key that can be used to provide additional metadata back to the provider.
+
+### Plan Customization
+
+Scripts can customize the plan phase of the Terraform lifecycle by providing a plan command configuration, allowing for more dynamic resource management. If the plan returns a `"???"` value for any `output` key this will be treated as a dynamic value that requires re-evaluation during the apply phase. This allows scripts to signal that certain outputs cannot be determined until the resource is actually created or updated.
+
+### Output Drift Detection
+
+If an update is required to correct the state of the `output` values, the read script can set the `output.__meta.output_drift_detected` key to `true`. This will allow the provider to set the `output_drift` attribute to `true` and trigger an update during the next apply.
+
+### State Awareness
+
+Scripts can access the current state output via the `TF_SCRIPT_STATE_OUTPUT` environment variable, allowing for more informed operations during updates or deletions.
+
+### Lifecycle Awareness
+
+By inspecting the `TF_SCRIPT_LIFECYCLE` environment variable, scripts can adapt their behavior based on the current lifecycle phase.
+
 ## Example Usage
 
 ```terraform
@@ -28,12 +56,21 @@ resource "shell_script" "example" {
   inputs = {
     file_name = "foo"
   }
+
   os_commands = {
     default = {
+      plan = {
+        command = <<-EOF
+          set -euo pipefail
+          file_name="$(jq --raw-output '.file_name' <<<"$${TF_SCRIPT_INPUTS}")"
+          path="/tmp/$${file_name}"
+          printf '{"exists": true,"path":"%%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
       create = {
         command = <<-EOF
           set -euo pipefail
-          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          file_name="$(jq --raw-output '.file_name' <<<"$${TF_SCRIPT_INPUTS}")"
           path="/tmp/$${file_name}"
           touch "$${path}"
           printf '{"exists": true,"path":"%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
@@ -42,21 +79,21 @@ resource "shell_script" "example" {
       read = {
         command = <<-EOF
           set -euo pipefail
-          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          file_name="$(jq --raw-output '.file_name' <<<"$${TF_SCRIPT_INPUTS}")"
           path="/tmp/$${file_name}"
           if [[ -f "$${path}" ]]; then
             printf '{"exists": true,"path":"%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
           else
-            printf '{"exists": false,"path":"%s"}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
+            printf '{"exists": false,"path":"%s","__meta":{"output_drift_detected":true}}' "$${path}" > "$${TF_SCRIPT_OUTPUT}"
           fi
         EOF
       }
       update = {
         command = <<-EOF
           set -euo pipefail
-          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          file_name="$(jq --raw-output '.file_name' <<<"$${TF_SCRIPT_INPUTS}")"
           path="/tmp/$${file_name}"
-          old_path="$(echo "$${TF_SCRIPT_STATE_OUTPUT}" | jq -r '.path')"
+          old_path="$(jq --raw-output '.path' <<<"$${TF_SCRIPT_STATE_OUTPUT}")"
           if [[ "$${path}" != "$${old_path}" ]] && [[ -f "$${old_path}" ]]; then
             mv -f "$${old_path}" "$${path}"
           else
@@ -68,17 +105,26 @@ resource "shell_script" "example" {
       delete = {
         command = <<-EOF
           set -euo pipefail
-          file_name="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.file_name')"
+          file_name="$(jq --raw-output '.file_name' <<<"$${TF_SCRIPT_INPUTS}")"
           path="/tmp/$${file_name}"
           rm -f "$${path}"
         EOF
       }
     }
     windows = {
+      plan = {
+        command = <<-EOF
+          $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
+          $fileName = $inputs.file_name
+          $path = "$env:TEMP\$fileName"
+          @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+        EOF
+      }
       create = {
         command = <<-EOF
           $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
-          $path = "$env:TEMP\$inputs.file_name"
+          $fileName = $inputs.file_name
+          $path = "$env:TEMP\$fileName"
           New-Item -Path $path -ItemType File -Force
           @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
@@ -86,18 +132,20 @@ resource "shell_script" "example" {
       read = {
         command = <<-EOF
           $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
-          $path = "$env:TEMP\$inputs.file_name"
+          $fileName = $inputs.file_name
+          $path = "$env:TEMP\$fileName"
           if (Test-Path $path) {
             @{exists=$true; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
           } else {
-            @{exists=$false; path=$path} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+            @{exists=$false; path=$path; __meta=@{output_drift_detected=$true}} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
           }
         EOF
       }
       update = {
         command = <<-EOF
           $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
-          $path = "$env:TEMP\$inputs.file_name"
+          $fileName = $inputs.file_name
+          $path = "$env:TEMP\$fileName"
           $state = $env:TF_SCRIPT_STATE_OUTPUT | ConvertFrom-Json
           $oldPath = $state.path
           if ($path -ne $oldPath) {
@@ -111,12 +159,15 @@ resource "shell_script" "example" {
       delete = {
         command = <<-EOF
           $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
-          $path = "$env:TEMP\$inputs.file_name"
-          Remove-Item -Path $path -Force
+          $fileName = $inputs.file_name
+          $path = "$env:TEMP\$fileName"
+          Remove-Item -Path $path -Force -ErrorAction Ignore
         EOF
       }
     }
   }
+
+  output_drift = false
 }
 ```
 
@@ -126,12 +177,14 @@ resource "shell_script" "example" {
 ### Required
 
 - `os_commands` (Attributes Map) A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided. (see [below for nested schema](#nestedatt--os_commands))
+- `output_drift` (Boolean) This is used by the provider to manage the output state and must always be set to false.
 
 ### Optional
 
 - `environment` (Map of String) The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.
 - `inputs` (Dynamic) Inputs to be made available to the script; these can be accessed as JSON via the `TF_SCRIPT_INPUTS` environment variable.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
+- `triggers` (Dynamic) Allows specifying values that trigger resource replacement when changed.
 - `working_directory` (String) The working directory to use when executing the commands; this will default to the _Terraform_ working directory.
 
 ### Read-Only
@@ -147,6 +200,10 @@ Required:
 - `delete` (Attributes) The delete command configuration. (see [below for nested schema](#nestedatt--os_commands--delete))
 - `read` (Attributes) The read command configuration. (see [below for nested schema](#nestedatt--os_commands--read))
 - `update` (Attributes) The update command configuration. (see [below for nested schema](#nestedatt--os_commands--update))
+
+Optional:
+
+- `plan` (Attributes) The plan command configuration, this can be used to customize the plan phase of the Terraform lifecycle. (see [below for nested schema](#nestedatt--os_commands--plan))
 
 <a id="nestedatt--os_commands--create"></a>
 ### Nested Schema for `os_commands.create`
@@ -194,6 +251,18 @@ Required:
 Optional:
 
 - `interpreter` (List of String) The interpreter to use for executing the update command; if not set the platform default interpreter will be used.
+
+
+<a id="nestedatt--os_commands--plan"></a>
+### Nested Schema for `os_commands.plan`
+
+Required:
+
+- `command` (String) The plan command to execute.
+
+Optional:
+
+- `interpreter` (List of String) The interpreter to use for executing the plan command; if not set the platform default interpreter will be used.
 
 
 
