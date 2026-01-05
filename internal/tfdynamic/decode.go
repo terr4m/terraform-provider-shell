@@ -16,12 +16,17 @@ func Decode(ctx context.Context, obj any) (types.Dynamic, diag.Diagnostics) {
 		return types.DynamicNull(), nil
 	}
 
-	val, diags := decodeScalar(ctx, obj)
+	v, diags := decodeScalar(ctx, obj)
 	if diags.HasError() {
 		return types.Dynamic{}, diags
 	}
 
-	return types.DynamicValue(val), diags
+	switch val := v.(type) {
+	case types.Dynamic:
+		return val, diags
+	}
+
+	return types.DynamicValue(v), diags
 }
 
 // decodeScalar decodes a scalar value into a Terraform attribute value.
@@ -36,6 +41,9 @@ func decodeScalar(ctx context.Context, a any) (attr.Value, diag.Diagnostics) {
 	case bool:
 		return types.BoolValue(v), nil
 	case string:
+		if v == UnknownStringLiteral {
+			return types.DynamicUnknown(), nil
+		}
 		return types.StringValue(v), nil
 	case []any:
 		return decodeSequence(ctx, v)

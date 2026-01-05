@@ -28,6 +28,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
+      - name: Setup rumdl
+        uses: action-stars/install-tool-from-github-release@1fa61c3bea52eca3bcdb1f5c961a3b113fe7fa54 # v0.2.6
+        with:
+          github_token: ${{ github.token }}
+          owner: rvben
+          repository: rumdl
+          filename_format: "{name}-v{version}-{arch}-{os}.{ext}"
+          arch_amd64: x86_64
+          os_linux: unknown-linux-gnu
+          check_command: rumdl --version
+          version: latest
+
+      - name: Lint markdown
+        run: rumdl check --output-format github .
+
       - name: Setup Go
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
@@ -107,7 +122,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          tf_versions="$(curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]')"
+          tf_versions="$(curl --fail --silent --location --retry 3 https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]')"
 
           {
             echo "tf_versions=${tf_versions}"
@@ -145,12 +160,15 @@ jobs:
           terraform_version: ${{ matrix.tf_version }}
           terraform_wrapper: false
 
-      - name: Terraform Path
+      - name: Terraform Lookup
         id: tf
         run: |
           set -euo pipefail
 
-          echo "path=$(command -v terraform || true)" >> "${GITHUB_OUTPUT}"
+          {
+            echo "version=$(terraform version -json | jq --raw-output '.terraform_version')"
+            echo "path=$(command -v terraform || true)"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Go mod download
         run: go mod download
@@ -159,7 +177,7 @@ jobs:
         env:
           TF_ACC: "1"
           TF_ACC_PROVIDER_NAMESPACE: terr4m
-          TF_ACC_TERRAFORM_VERSION: ${{ matrix.tf_version }}
+          TF_ACC_TERRAFORM_VERSION: ${{ steps.tf.outputs.version }}
           TF_ACC_TERRAFORM_PATH: ${{ steps.tf.outputs.path }}
         run: go test -v -timeout 120m -cover ./...
 

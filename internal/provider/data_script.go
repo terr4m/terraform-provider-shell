@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/terr4m/terraform-provider-shell/internal/tfdynamic"
@@ -16,6 +17,7 @@ import (
 
 var _ datasource.DataSource = &ScriptDataSource{}
 var _ datasource.DataSourceWithConfigure = &ScriptDataSource{}
+var _ datasource.DataSourceWithValidateConfig = &ScriptDataSource{}
 
 // NewScriptDataSource creates a new consistent hash data source.
 func NewScriptDataSource() datasource.DataSource {
@@ -124,6 +126,24 @@ func (d *ScriptDataSource) Configure(ctx context.Context, req datasource.Configu
 	d.providerData = providerData
 }
 
+func (d *ScriptDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
+	var conf ScriptDataSourceModel
+	if resp.Diagnostics.Append(req.Config.Get(ctx, &conf)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	var commands map[string]ReadCommandModel
+	if resp.Diagnostics.Append(conf.OSCommands.ElementsAs(ctx, &commands, false)...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	_, ok := commands[defaultCommandsKey]
+	if !ok {
+		resp.Diagnostics.AddAttributeError(path.Root("os_commands").AtMapKey(defaultCommandsKey), "Default commands are required.", "expected default to be set in os_commands")
+		return
+	}
+}
+
 // Read reads the data source.
 func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data ScriptDataSourceModel
@@ -139,7 +159,7 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	var command ReadCommandModel
 	command, ok := commands[runtime.GOOS]
 	if !ok {
-		command = commands["default"]
+		command = commands[defaultCommandsKey]
 	}
 
 	timeout, diags := data.Timeouts.Read(ctx, d.providerData.DefaultTimeouts.Read)
@@ -156,12 +176,12 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	raw, diags := runCommand(ctx, d.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, nil, true)
+	res, diags := runCommand(ctx, d.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, nil, true)
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
 
-	out, diags := tfdynamic.Decode(ctx, raw)
+	out, diags := tfdynamic.Decode(ctx, res.Output)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

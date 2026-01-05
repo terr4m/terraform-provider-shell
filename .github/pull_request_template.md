@@ -1,5 +1,4 @@
-<!-- markdownlint-disable-next-line MD041 -->
-## Description
+## Description <!-- rumdl-disable-line MD041 -->
 
 Brief description of what this PR does.
 
@@ -16,9 +15,9 @@ Please delete options that are not relevant.
 
 ## Changes Made
 
--
--
--
+- <change 1>
+- <change 2>
+- <change 3>
 
 ## Testing
 

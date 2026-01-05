@@ -32,8 +32,8 @@ data "shell_script" "example" {
       read = {
         command = <<-EOF
           set -euo pipefail
-          version_count="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.version_count')"
-          curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${version_count}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+          version_count="$(jq --raw-output '.version_count' <<<"$${TF_SCRIPT_INPUTS}")"
+          curl --fail --silent --location --retry 3 https://endoflife.date/api/terraform.json | jq --raw-output --compact-output --argjson count "$${version_count}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
     }

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"regexp"
 	"runtime"
 	"testing"
@@ -14,11 +15,12 @@ import (
 func TestAccScriptDataSource(t *testing.T) {
 	t.Parallel()
 
-	t.Run("read_default", func(t *testing.T) {
+	t.Run("read", func(t *testing.T) {
 		t.Parallel()
 
+		cmd := `printf '{"data": true}' > "$${TF_SCRIPT_OUTPUT}"`
 		if runtime.GOOS == "windows" {
-			t.Skip("skipping test on windows platform")
+			cmd = `'{"data": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8`
 		}
 
 		resource.Test(t, resource.TestCase{
@@ -26,23 +28,21 @@ func TestAccScriptDataSource(t *testing.T) {
 			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 			Steps: []resource.TestStep{
 				{
-					Config: `
+					Config: fmt.Sprintf(`
 data "shell_script" "test" {
   os_commands = {
     default = {
       read = {
         command = <<-EOF
-          set -euo pipefail
-          curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+          %s
         EOF
       }
     }
   }
 }
-`,
+`, cmd),
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(4)),
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"data": knownvalue.Bool(true)})),
 					},
 				},
 			},
@@ -111,7 +111,7 @@ data "shell_script" "test" {
           set -euo pipefail
           echo "Test..."
           echo "Test..." >&2
-          curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+          printf '{"os": "linux"}\n' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
     }
@@ -119,11 +119,8 @@ data "shell_script" "test" {
       read = {
         command = <<-EOF
           Write-Host "Test..."
-					Write-Error "Test..."
-          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
-          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First 4
-          $latest = $sorted | ForEach-Object { $_.latest }
-          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          Write-Error "Test..."
+          '{"os": "windows"}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
     }
@@ -131,8 +128,7 @@ data "shell_script" "test" {
 }
 `,
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(4)),
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"os": knownvalue.StringExact(runtime.GOOS)})),
 					},
 				},
 			},
@@ -155,7 +151,7 @@ data "shell_script" "test" {
         interpreter = ["/bin/bash", "-c"]
         command = <<-EOF
           set -euo pipefail
-          curl -s https://endoflife.date/api/terraform.json | jq -rc '[sort_by(.releaseDate) | reverse | .[0:4] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+          printf '{"os": "linux"}\n' > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
     }
@@ -163,10 +159,7 @@ data "shell_script" "test" {
       read = {
         interpreter = ["pwsh", "-c"]
         command = <<-EOF
-          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
-          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First 4
-          $latest = $sorted | ForEach-Object { $_.latest }
-          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          '{"os": "windows"}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
     }
@@ -175,8 +168,7 @@ data "shell_script" "test" {
 `,
 
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(4)),
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"os": knownvalue.StringExact(runtime.GOOS)})),
 					},
 				},
 			},
@@ -194,24 +186,21 @@ data "shell_script" "test" {
 					Config: `
 data "shell_script" "test" {
   environment = {
-    "TF_VERSION_COUNT" = "3"
+    "MY_VALUE" = "my-value"
   }
   os_commands = {
     default = {
       read = {
         command = <<-EOF
           set -euo pipefail
-          curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${TF_VERSION_COUNT}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+          printf '{"value": "%s"}' "$${MY_VALUE}" > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
     }
     windows = {
       read = {
         command = <<-EOF
-          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
-          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First $env:TF_VERSION_COUNT
-          $latest = $sorted | ForEach-Object { $_.latest }
-          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          @{value=$env:MY_VALUE} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
     }
@@ -220,8 +209,7 @@ data "shell_script" "test" {
 `,
 
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(3)),
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"value": knownvalue.StringExact("my-value")})),
 					},
 				},
 			},
@@ -239,15 +227,15 @@ data "shell_script" "test" {
 					Config: `
 data "shell_script" "test" {
   inputs = {
-    version_count = 3
+    value = "my-value"
   }
   os_commands = {
     default = {
       read = {
         command = <<-EOF
           set -euo pipefail
-          version_count="$(echo "$${TF_SCRIPT_INPUTS}" | jq -r '.version_count')"
-          curl -s https://endoflife.date/api/terraform.json | jq -rc --argjson count "$${version_count}" '[sort_by(.releaseDate) | reverse | .[0:$count] | .[].latest]' > "$${TF_SCRIPT_OUTPUT}"
+          value="$(jq --raw-output '.value' <<<"$${TF_SCRIPT_INPUTS}")"
+          printf '{"value": "%s"}' "$${value}" > "$${TF_SCRIPT_OUTPUT}"
         EOF
       }
     }
@@ -255,10 +243,7 @@ data "shell_script" "test" {
       read = {
         command = <<-EOF
           $inputs = $env:TF_SCRIPT_INPUTS | ConvertFrom-Json
-          $response = Invoke-RestMethod -Uri "https://endoflife.date/api/terraform.json"
-          $sorted = $response | Sort-Object releaseDate -Descending | Select-Object -First $inputs.version_count
-          $latest = $sorted | ForEach-Object { $_.latest }
-          $latest | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
+          @{value=$inputs.value} | ConvertTo-Json -Compress | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8
         EOF
       }
     }
@@ -267,8 +252,7 @@ data "shell_script" "test" {
 `,
 
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.NotNull()),
-						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ListSizeExact(3)),
+						statecheck.ExpectKnownValue("data.shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"value": knownvalue.StringExact("my-value")})),
 					},
 				},
 			},
@@ -305,7 +289,7 @@ data "shell_script" "test" {
     }
   }
   timeouts = {
-    read = "10s"
+    read = "30s"
   }
 }
 `,
@@ -317,7 +301,85 @@ data "shell_script" "test" {
 		})
 	})
 
-	t.Run("read_with_timeout_error", func(t *testing.T) {
+	t.Run("error_no_default_commands", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    linux = {
+      read = {
+        command = <<-EOF
+          set -euo pipefail
+          printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+  }
+}
+`,
+					ExpectError: regexp.MustCompile(`Default commands are required`),
+				},
+			},
+		})
+	})
+
+	t.Run("error_no_json", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = ""
+      }
+    }
+  }
+}
+`,
+					ExpectError: regexp.MustCompile(`Failed to read output file`),
+				},
+			},
+		})
+	})
+
+	t.Run("error_exit_code", func(t *testing.T) {
+		t.Parallel()
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: `
+data "shell_script" "test" {
+  os_commands = {
+    default = {
+      read = {
+        command = "exit 1"
+      }
+    }
+  }
+}
+`,
+					ExpectError: regexp.MustCompile(`Command failed with exit code: 1`),
+				},
+			},
+		})
+	})
+
+	t.Run("error_timeout", func(t *testing.T) {
 		t.Parallel()
 
 		resource.Test(t, resource.TestCase{
@@ -357,7 +419,7 @@ data "shell_script" "test" {
 		})
 	})
 
-	t.Run("read_with_error_message", func(t *testing.T) {
+	t.Run("error_message", func(t *testing.T) {
 		t.Parallel()
 
 		resource.Test(t, resource.TestCase{

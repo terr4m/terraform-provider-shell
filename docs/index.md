@@ -87,6 +87,8 @@ resource "shell_script" "example" {
       }
     }
   }
+
+  output_drift = false
 }
 ```
 
