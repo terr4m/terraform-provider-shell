@@ -58,7 +58,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `, cmd),
 					ConfigStateChecks: []statecheck.StateCheck{
@@ -150,7 +149,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ConfigStateChecks: []statecheck.StateCheck{
@@ -219,7 +217,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ConfigStateChecks: []statecheck.StateCheck{
@@ -294,7 +291,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ConfigStateChecks: []statecheck.StateCheck{
@@ -363,7 +359,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ConfigStateChecks: []statecheck.StateCheck{
@@ -459,7 +454,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 
@@ -558,7 +552,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 
@@ -641,7 +634,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ConfigStateChecks: []statecheck.StateCheck{
@@ -755,7 +747,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `
 
@@ -897,7 +888,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `, file)
 
@@ -984,7 +974,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `
 
@@ -1008,51 +997,6 @@ resource "shell_script" "test" {
 					ConfigStateChecks: []statecheck.StateCheck{
 						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"run": knownvalue.Bool(true)})),
 					},
-				},
-			},
-		})
-	})
-
-	t.Run("error_no_output_drift", func(t *testing.T) {
-		t.Parallel()
-
-		cmd := `printf '{"run": true}' > "$${TF_SCRIPT_OUTPUT}"`
-		if runtime.GOOS == "windows" {
-			cmd = `'{"run": true}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8`
-		}
-
-		resource.Test(t, resource.TestCase{
-			PreCheck:                 func() { testAccPreCheck(t) },
-			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-			Steps: []resource.TestStep{
-				{
-					Config: fmt.Sprintf(`
-resource "shell_script" "test" {
-  os_commands = {
-    default = {
-      create = {
-        command = <<-EOF
-          %s
-        EOF
-      }
-      read = {
-        command = <<-EOF
-          %[1]s
-        EOF
-      }
-      update = {
-        command = <<-EOF
-          %[1]s
-        EOF
-      }
-      delete = {
-        command = ""
-      }
-    }
-  }
-}
-`, cmd),
-					ExpectError: regexp.MustCompile(`Missing required argument`),
 				},
 			},
 		})
@@ -1093,7 +1037,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ExpectError: regexp.MustCompile(`Default commands are required`),
@@ -1128,7 +1071,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ExpectError: regexp.MustCompile(`Failed to read output file`),
@@ -1163,7 +1105,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ExpectError: regexp.MustCompile(`Command failed with exit code: 1`),
@@ -1236,7 +1177,6 @@ resource "shell_script" "test" {
       }
     }
   }
-  output_drift = false
 }
 `,
 					ExpectError: regexp.MustCompile(`my-error`),
