@@ -1,35 +1,35 @@
 set windows-shell := ["pwsh", "-NoLogo", "-Command"]
 
 default:
-  just --list
+    just --list
 
 setup: tidy
-  {{ if os() == "windows" { 'New-Item -Name "dist" -ItemType "directory" -Force' } else { "mkdir -p ./dist" } }}
+    {{ if os() == "windows" { 'New-Item -Name "dist" -ItemType "directory" -Force' } else { "mkdir -p ./dist" } }}
 
 tidy:
-  go mod tidy
+    go mod tidy
 
 fmt:
-  gofmt -s -w -e .
+    golangci-lint fmt
 
 lint:
-  golangci-lint run --timeout 120s
+    golangci-lint run --fix --timeout 120s
 
 test:
-  go test -v -cover -timeout=120s -parallel=10 ./...
+    go test -v -cover -timeout=120s -parallel=10 ./...
 
 testacc:
-  go test -v -cover -timeout 120m ./...
+    go test -v -cover -timeout 120m ./...
 
 build:
-  go build -o ./dist -v ./...
+    go build -o ./dist -v ./...
 
-[working-directory: "tools"]
+[working-directory("tools")]
 docs:
-  go generate ./...
+    go generate ./...
 
 docs-fmt:
-  rumdl fmt --fix .
+    rumdl fmt --fix .
 
 docs-lint:
-  rumdl check .
+    rumdl check .

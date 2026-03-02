@@ -1,4 +1,4 @@
-## Description <!-- rumdl-disable-line MD041 -->
+## Description
 
 Brief description of what this PR does.
 
