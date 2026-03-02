@@ -1,6 +1,6 @@
 module github.com/terr4m/terraform-provider-shell
 
-go 1.24.0
+go 1.26
 
 require (
 	github.com/google/go-cmp v0.7.0

@@ -2,6 +2,7 @@
 disable = ["MD013", "MD028"]
 
 [per-file-ignores]
+".github/pull_request_template.md" = ["MD041"]
 "docs/**/*.md" = ["MD012", "MD022"]
 
 [MD024]
