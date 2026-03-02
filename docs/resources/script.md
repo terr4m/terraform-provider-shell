@@ -166,8 +166,6 @@ resource "shell_script" "example" {
       }
     }
   }
-
-  output_drift = false
 }
 ```
 
@@ -177,7 +175,6 @@ resource "shell_script" "example" {
 ### Required
 
 - `os_commands` (Attributes Map) A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided. (see [below for nested schema](#nestedatt--os_commands))
-- `output_drift` (Boolean) This is used by the provider to manage the output state and must always be set to false.
 
 ### Optional
 
@@ -190,6 +187,7 @@ resource "shell_script" "example" {
 ### Read-Only
 
 - `output` (Dynamic) The output of the script as a structured type; this can be accessed in the read, update and delete commands as JSON via the `TF_SCRIPT_STATE_OUTPUT` environment variable.
+- `output_drift` (Boolean) If the output has drifted and needs reconciling.
 
 <a id="nestedatt--os_commands"></a>
 ### Nested Schema for `os_commands`

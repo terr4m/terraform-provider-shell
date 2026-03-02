@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework-validators/boolvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -197,12 +196,9 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				Computed:            true,
 			},
 			"output_drift": schema.BoolAttribute{
-				Description:         "This is used by the provider to manage the output state and must always be set to false.",
-				MarkdownDescription: "This is used by the provider to manage the output state and must always be set to false.",
-				Required:            true,
-				Validators: []validator.Bool{
-					boolvalidator.Equals(false),
-				},
+				Description:         "If the output has drifted and needs reconciling.",
+				MarkdownDescription: "If the output has drifted and needs reconciling.",
+				Computed:            true,
 			},
 			"triggers": schema.DynamicAttribute{
 				Description:         "Allows specifying values that trigger resource replacement when changed.",
@@ -289,7 +285,6 @@ func (r *ScriptResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 
 		plan.Output = types.DynamicUnknown()
 	} else {
-
 		timeout, diags := plan.Timeouts.Read(ctx, r.providerData.DefaultTimeouts.Read)
 		if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 			return
@@ -379,6 +374,7 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 	plan.Output = out
+	plan.OutputDrift = types.BoolValue(false)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
