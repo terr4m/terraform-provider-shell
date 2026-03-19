@@ -61,8 +61,15 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 	}
 
 	if !tfEnvironment.IsNull() {
-		if diags.Append(tfEnvironment.ElementsAs(ctx, &environment, false)...); diags.HasError() {
+		// ElementsAs replaces the target map via reflection (reflect.MakeMapWithSize
+		// in the plugin framework), so decode into a temporary map first and then
+		// merge to preserve the provider-level environment entries copied above.
+		resourceEnv := map[string]string{}
+		if diags.Append(tfEnvironment.ElementsAs(ctx, &resourceEnv, false)...); diags.HasError() {
 			return res, diags
+		}
+		for k, v := range resourceEnv {
+			environment[k] = v
 		}
 	}
 
