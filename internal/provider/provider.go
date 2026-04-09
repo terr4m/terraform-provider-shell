@@ -15,8 +15,10 @@ import (
 )
 
 // Ensure ShellProvider satisfies various provider interfaces.
-var _ provider.Provider = &ShellProvider{}
-var _ provider.ProviderWithFunctions = &ShellProvider{}
+var (
+	_ provider.Provider              = &ShellProvider{}
+	_ provider.ProviderWithFunctions = &ShellProvider{}
+)
 
 // New returns a new provider implementation.
 func New(version, commit string) func() provider.Provider {
@@ -59,12 +61,12 @@ type ShellProvider struct {
 	commit  string
 }
 
-func (p *ShellProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+func (p *ShellProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "shell"
 	resp.Version = p.version
 }
 
-func (p *ShellProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *ShellProvider) Schema(ctx context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell provider allows you to execute arbitrary shell scripts and parse their JSON output for use in your Terraform configurations.",
 		MarkdownDescription: "The _Shell_ provider allows you to execute arbitrary shell scripts and parse their JSON output for use in your _Terraform_ configurations. This is particularly useful for running scripts that interact with external APIs, or other systems that don't have a native _Terraform_ provider, or for performing complex data transformations.",
@@ -161,17 +163,17 @@ func (p *ShellProvider) Configure(ctx context.Context, req provider.ConfigureReq
 	resp.ResourceData = providerData
 }
 
-func (p *ShellProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+func (p *ShellProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewScriptDataSource,
 	}
 }
 
-func (p *ShellProvider) Functions(ctx context.Context) []func() function.Function {
+func (p *ShellProvider) Functions(_ context.Context) []func() function.Function {
 	return []func() function.Function{}
 }
 
-func (p *ShellProvider) Resources(ctx context.Context) []func() resource.Resource {
+func (p *ShellProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewScriptResource,
 	}

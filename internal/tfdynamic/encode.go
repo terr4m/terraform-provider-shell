@@ -9,7 +9,7 @@ import (
 )
 
 // EncodeDynamic encodes a Terraform dynamic value.
-func EncodeDynamic(ctx context.Context, d types.Dynamic) (any, error) {
+func EncodeDynamic(_ context.Context, d types.Dynamic) (any, error) {
 	if d.IsUnknown() {
 		return nil, fmt.Errorf("underlying value is unknown")
 	}

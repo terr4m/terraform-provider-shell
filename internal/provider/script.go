@@ -14,6 +14,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/terr4m/terraform-provider-shell/internal/script"
+	"github.com/terr4m/terraform-provider-shell/internal/shell"
 	"github.com/terr4m/terraform-provider-shell/internal/tfdynamic"
 )
 
@@ -35,6 +38,7 @@ func NewScriptResource() resource.Resource {
 // ScriptResource defines the resource implementation.
 type ScriptResource struct {
 	providerData *ShellProviderData
+	runner       script.CommandRunner
 }
 
 // ScriptResourceModel describes the resource data model.
@@ -65,12 +69,12 @@ type CommandModel struct {
 }
 
 // Metadata returns the resource metadata.
-func (d *ScriptResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *ScriptResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = fmt.Sprintf("%s_script", req.ProviderTypeName)
 }
 
 // Schema returns the resource schema.
-func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *ScriptResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle.",
 		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.",
@@ -223,7 +227,7 @@ func (r *ScriptResource) Schema(ctx context.Context, req resource.SchemaRequest,
 }
 
 // Configure configures the resource.
-func (r *ScriptResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+func (r *ScriptResource) Configure(_ context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -235,6 +239,15 @@ func (r *ScriptResource) Configure(ctx context.Context, req resource.ConfigureRe
 	}
 
 	r.providerData = providerData
+
+	var logProvider *shell.LogProvider
+	if providerData.LogOutput {
+		logProvider = &shell.LogProvider{
+			Logger: &script.TFLogLogger{},
+		}
+	}
+
+	r.runner = script.NewCommandRunner(logProvider)
 }
 
 // ValidateConfig validates the resource config.
@@ -313,7 +326,26 @@ func (r *ScriptResource) ModifyPlan(ctx context.Context, req resource.ModifyPlan
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 
-		res, diags := runCommand(ctx, r.providerData, commands.Plan.Interpreter, plan.Environment, plan.WorkingDirectory, commands.Plan.Command, TFLifecyclePlan, inputs, stateOutput, true)
+		interpreter, diags := resolveInterpreter(ctx, commands.Plan.Interpreter, r.providerData.DefaultInterpreter)
+		if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+			return
+		}
+
+		environment, diags := resolveEnvironment(ctx, plan.Environment, r.providerData.Environment)
+		if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+			return
+		}
+
+		res, diags := r.runner.Run(ctx, script.RunOptions{
+			Interpreter:      interpreter,
+			Environment:      environment,
+			WorkingDirectory: plan.WorkingDirectory.ValueString(),
+			Command:          commands.Plan.Command.ValueString(),
+			Lifecycle:        script.LifecyclePlan,
+			Inputs:           inputs,
+			StateOutput:      stateOutput,
+			ReadJSON:         true,
+		})
 		if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 			return
 		}
@@ -363,7 +395,25 @@ func (r *ScriptResource) Create(ctx context.Context, req resource.CreateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	res, diags := runCommand(ctx, r.providerData, command.Create.Interpreter, plan.Environment, plan.WorkingDirectory, command.Create.Command, TFLifecycleCreate, inputs, nil, true)
+	interpreter, diags := resolveInterpreter(ctx, command.Create.Interpreter, r.providerData.DefaultInterpreter)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	environment, diags := resolveEnvironment(ctx, plan.Environment, r.providerData.Environment)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	res, diags := r.runner.Run(ctx, script.RunOptions{
+		Interpreter:      interpreter,
+		Environment:      environment,
+		WorkingDirectory: plan.WorkingDirectory.ValueString(),
+		Command:          command.Create.Command.ValueString(),
+		Lifecycle:        script.LifecycleCreate,
+		Inputs:           inputs,
+		ReadJSON:         true,
+	})
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -417,7 +467,26 @@ func (r *ScriptResource) Read(ctx context.Context, req resource.ReadRequest, res
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	res, diags := runCommand(ctx, r.providerData, command.Read.Interpreter, state.Environment, state.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, stateOutput, true)
+	interpreter, diags := resolveInterpreter(ctx, command.Read.Interpreter, r.providerData.DefaultInterpreter)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	environment, diags := resolveEnvironment(ctx, state.Environment, r.providerData.Environment)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	res, diags := r.runner.Run(ctx, script.RunOptions{
+		Interpreter:      interpreter,
+		Environment:      environment,
+		WorkingDirectory: state.WorkingDirectory.ValueString(),
+		Command:          command.Read.Command.ValueString(),
+		Lifecycle:        script.LifecycleRead,
+		Inputs:           inputs,
+		StateOutput:      stateOutput,
+		ReadJSON:         true,
+	})
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -476,7 +545,26 @@ func (r *ScriptResource) Update(ctx context.Context, req resource.UpdateRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	res, diags := runCommand(ctx, r.providerData, command.Update.Interpreter, plan.Environment, plan.WorkingDirectory, command.Update.Command, TFLifecycleUpdate, inputs, stateOutput, true)
+	interpreter, diags := resolveInterpreter(ctx, command.Update.Interpreter, r.providerData.DefaultInterpreter)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	environment, diags := resolveEnvironment(ctx, plan.Environment, r.providerData.Environment)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	res, diags := r.runner.Run(ctx, script.RunOptions{
+		Interpreter:      interpreter,
+		Environment:      environment,
+		WorkingDirectory: plan.WorkingDirectory.ValueString(),
+		Command:          command.Update.Command.ValueString(),
+		Lifecycle:        script.LifecycleUpdate,
+		Inputs:           inputs,
+		StateOutput:      stateOutput,
+		ReadJSON:         true,
+	})
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}
@@ -530,7 +618,26 @@ func (r *ScriptResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	_, diags = runCommand(ctx, r.providerData, command.Delete.Interpreter, state.Environment, state.WorkingDirectory, command.Delete.Command, TFLifecycleDelete, inputs, stateOutput, false)
+	interpreter, diags := resolveInterpreter(ctx, command.Delete.Interpreter, r.providerData.DefaultInterpreter)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	environment, diags := resolveEnvironment(ctx, state.Environment, r.providerData.Environment)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	_, diags = r.runner.Run(ctx, script.RunOptions{
+		Interpreter:      interpreter,
+		Environment:      environment,
+		WorkingDirectory: state.WorkingDirectory.ValueString(),
+		Command:          command.Delete.Command.ValueString(),
+		Lifecycle:        script.LifecycleDelete,
+		Inputs:           inputs,
+		StateOutput:      stateOutput,
+		ReadJSON:         false,
+	})
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}

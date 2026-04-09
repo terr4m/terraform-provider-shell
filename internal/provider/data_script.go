@@ -12,12 +12,17 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
+	"github.com/terr4m/terraform-provider-shell/internal/script"
+	"github.com/terr4m/terraform-provider-shell/internal/shell"
 	"github.com/terr4m/terraform-provider-shell/internal/tfdynamic"
 )
 
-var _ datasource.DataSource = &ScriptDataSource{}
-var _ datasource.DataSourceWithConfigure = &ScriptDataSource{}
-var _ datasource.DataSourceWithValidateConfig = &ScriptDataSource{}
+var (
+	_ datasource.DataSource                   = &ScriptDataSource{}
+	_ datasource.DataSourceWithConfigure      = &ScriptDataSource{}
+	_ datasource.DataSourceWithValidateConfig = &ScriptDataSource{}
+)
 
 // NewScriptDataSource creates a new consistent hash data source.
 func NewScriptDataSource() datasource.DataSource {
@@ -27,6 +32,7 @@ func NewScriptDataSource() datasource.DataSource {
 // ScriptDataSource defines the data source implementation.
 type ScriptDataSource struct {
 	providerData *ShellProviderData
+	runner       script.CommandRunner
 }
 
 // ScriptDataSourceModel describes the data source data model.
@@ -45,12 +51,12 @@ type ReadCommandModel struct {
 }
 
 // Metadata returns the data source metadata.
-func (d *ScriptDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+func (d *ScriptDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
 	resp.TypeName = fmt.Sprintf("%s_script", req.ProviderTypeName)
 }
 
 // Schema returns the data source schema.
-func (d *ScriptDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+func (d *ScriptDataSource) Schema(ctx context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description:         "The Shell script data source allows you to execute an arbitrary command as the read part of a Terraform lifecycle.",
 		MarkdownDescription: "The _Shell_ script data source (`shell_script`) allows you to execute an arbitrary command as the read part of a _Terraform_ lifecycle. The script must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If the script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.",
@@ -112,7 +118,7 @@ func (d *ScriptDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 }
 
 // Configure configures the data source.
-func (d *ScriptDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+func (d *ScriptDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
 	if req.ProviderData == nil {
 		return
 	}
@@ -124,6 +130,15 @@ func (d *ScriptDataSource) Configure(ctx context.Context, req datasource.Configu
 	}
 
 	d.providerData = providerData
+
+	var logProvider *shell.LogProvider
+	if providerData.LogOutput {
+		logProvider = &shell.LogProvider{
+			Logger: &script.TFLogLogger{},
+		}
+	}
+
+	d.runner = script.NewCommandRunner(logProvider)
 }
 
 func (d *ScriptDataSource) ValidateConfig(ctx context.Context, req datasource.ValidateConfigRequest, resp *datasource.ValidateConfigResponse) {
@@ -176,7 +191,25 @@ func (d *ScriptDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	res, diags := runCommand(ctx, d.providerData, command.Read.Interpreter, data.Environment, data.WorkingDirectory, command.Read.Command, TFLifecycleRead, inputs, nil, true)
+	interpreter, diags := resolveInterpreter(ctx, command.Read.Interpreter, d.providerData.DefaultInterpreter)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	environment, diags := resolveEnvironment(ctx, data.Environment, d.providerData.Environment)
+	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
+		return
+	}
+
+	res, diags := d.runner.Run(ctx, script.RunOptions{
+		Interpreter:      interpreter,
+		Environment:      environment,
+		WorkingDirectory: data.WorkingDirectory.ValueString(),
+		Command:          command.Read.Command.ValueString(),
+		Lifecycle:        script.LifecycleRead,
+		Inputs:           inputs,
+		ReadJSON:         true,
+	})
 	if resp.Diagnostics.Append(diags...); resp.Diagnostics.HasError() {
 		return
 	}

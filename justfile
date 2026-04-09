@@ -9,6 +9,9 @@ setup: tidy
 tidy:
     go mod tidy
 
+update:
+    go get -u ./...
+
 fmt:
     golangci-lint fmt
 
