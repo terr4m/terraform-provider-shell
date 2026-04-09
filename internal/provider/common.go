@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 
@@ -56,14 +57,17 @@ func runCommand(ctx context.Context, providerData *ShellProviderData, tfInterpre
 	}
 
 	environment := map[string]string{}
-	for k, v := range providerData.Environment {
-		environment[k] = v
-	}
+	maps.Copy(environment, providerData.Environment)
 
 	if !tfEnvironment.IsNull() {
-		if diags.Append(tfEnvironment.ElementsAs(ctx, &environment, false)...); diags.HasError() {
+		// ElementsAs replaces the target map via reflection (reflect.MakeMapWithSize
+		// in the plugin framework), so decode into a temporary map first and then
+		// merge to preserve the provider-level environment entries copied above.
+		resourceEnv := map[string]string{}
+		if diags.Append(tfEnvironment.ElementsAs(ctx, &resourceEnv, false)...); diags.HasError() {
 			return res, diags
 		}
+		maps.Copy(environment, resourceEnv)
 	}
 
 	outFilePath, err := shell.GetOutFilePath()
