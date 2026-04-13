@@ -7,11 +7,6 @@ import (
 	"os"
 )
 
-// GetMetaFilePath returns the path to the meta file.
-func GetMetaFilePath() (string, error) {
-	return getTempFile("tf-script-meta-*.json")
-}
-
 // GetOutFilePath returns the path to the output file.
 func GetOutFilePath() (string, error) {
 	return getTempFile("tf-script-output-*.json")

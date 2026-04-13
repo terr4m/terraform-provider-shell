@@ -1,25 +1,45 @@
 version: "2"
 
+run:
+  allow-parallel-runners: true
+  concurrency: 10
+  timeout: 5m
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
 linters:
   default: none
 
   enable:
-    - copyloopvar
+    - bodyclose
     - durationcheck
     - errcheck
-    - forcetypeassert
+    - errorlint
+    - exhaustive
     - godot
     - govet
     - ineffassign
     - makezero
     - misspell
+    - modernize
     - nilerr
-    - predeclared
+    - noctx
+    - revive
     - staticcheck
     - unconvert
     - unparam
     - unused
     - usetesting
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    revive:
+      enable-default-rules: true
+      rules:
+        - name: redefines-builtin-id
 
   exclusions:
     generated: lax
@@ -33,13 +53,18 @@ linters:
       - builtin$
       - examples$
 
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-
 formatters:
   enable:
-    - gofmt
+    - gofumpt
+    - goimports
+
+  settings:
+    gofumpt:
+      module-path: github.com/terr4m/terraform-provider-shell
+      extra-rules: true
+    goimports:
+      local-prefixes:
+        - github.com/terr4m/terraform-provider-shell
 
   exclusions:
     generated: lax

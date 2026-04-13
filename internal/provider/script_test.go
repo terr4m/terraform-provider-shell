@@ -561,7 +561,7 @@ resource "shell_script" "test" {
 						},
 					},
 					ConfigStateChecks: []statecheck.StateCheck{
-						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"value": knownvalue.NumberFunc(func(v *big.Float) error { return nil })})),
+						statecheck.ExpectKnownValue("shell_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"value": knownvalue.NumberFunc(func(_ *big.Float) error { return nil })})),
 					},
 				},
 			},

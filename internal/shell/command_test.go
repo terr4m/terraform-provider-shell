@@ -15,23 +15,23 @@ type testLogger struct {
 	traces   []string
 }
 
-func (l *testLogger) Error(ctx context.Context, msg string, additionalFields ...map[string]any) {
+func (l *testLogger) Error(_ context.Context, msg string, _ ...map[string]any) {
 	l.errors = append(l.errors, msg)
 }
 
-func (l *testLogger) Warn(ctx context.Context, msg string, additionalFields ...map[string]any) {
+func (l *testLogger) Warn(_ context.Context, msg string, _ ...map[string]any) {
 	l.warnings = append(l.warnings, msg)
 }
 
-func (l *testLogger) Info(ctx context.Context, msg string, additionalFields ...map[string]any) {
+func (l *testLogger) Info(_ context.Context, msg string, _ ...map[string]any) {
 	l.infos = append(l.infos, msg)
 }
 
-func (l *testLogger) Debug(ctx context.Context, msg string, additionalFields ...map[string]any) {
+func (l *testLogger) Debug(_ context.Context, msg string, _ ...map[string]any) {
 	l.debugs = append(l.debugs, msg)
 }
 
-func (l *testLogger) Trace(ctx context.Context, msg string, additionalFields ...map[string]any) {
+func (l *testLogger) Trace(_ context.Context, msg string, _ ...map[string]any) {
 	l.traces = append(l.traces, msg)
 }
 
