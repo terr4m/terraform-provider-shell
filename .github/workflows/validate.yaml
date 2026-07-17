@@ -28,21 +28,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Setup rumdl
-        uses: action-stars/install-tool-from-github-release@1fa61c3bea52eca3bcdb1f5c961a3b113fe7fa54 # v0.2.6
-        with:
-          github_token: ${{ github.token }}
-          owner: rvben
-          repository: rumdl
-          filename_format: "{name}-v{version}-{arch}-{os}.{ext}"
-          arch_amd64: x86_64
-          os_linux: unknown-linux-gnu
-          check_command: rumdl --version
-          version: latest
-
-      - name: Lint markdown
-        run: rumdl check --output-format github .
-
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -64,6 +49,11 @@ jobs:
 
           mkdir -p ./dist
           go build -o ./dist -v .
+
+      - name: Lint markdown
+        uses: rvben/rumdl@460ba739bf72499fcc237a99c571a9116f23b205 # v0.2.34
+        with:
+          report-type: annotations
 
   generate:
     name: Generate
