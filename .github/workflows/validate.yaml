@@ -26,7 +26,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -51,7 +51,7 @@ jobs:
           go build -o ./dist -v .
 
       - name: Lint markdown
-        uses: rvben/rumdl@460ba739bf72499fcc237a99c571a9116f23b205 # v0.2.34
+        uses: rvben/rumdl@a03bd74996bec16d9365814c51f452cde48847bd # v0.2.39
         with:
           report-type: annotations
 
@@ -65,7 +65,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -136,7 +136,7 @@ jobs:
         tf_version: ${{ fromJson(needs.matrix.outputs.tf_versions) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
