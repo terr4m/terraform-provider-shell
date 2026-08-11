@@ -1,0 +1,22 @@
+changelog:
+  categories:
+    - title: 🚀 New Features
+      labels:
+        - type/feature
+
+    - title: 🐛 Bugfixes
+      labels:
+        - type/bug
+
+    - title: 🛠️ Maintenance
+      labels:
+        - type/chore
+        - dependency-update/go
+
+    - title: 📝 Documentation
+      labels:
+        - type/documentation
+
+    - title: 🏷 Other Changes
+      labels:
+        - "*"
