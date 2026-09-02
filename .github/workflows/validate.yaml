@@ -51,7 +51,7 @@ jobs:
           go build -o ./dist -v .
 
       - name: Lint markdown
-        uses: rvben/rumdl@9faf4696d56c0cff426a2f85b3fd476ebe0d0ec0 # v0.2.52
+        uses: rvben/rumdl@96c8520425eaf1b6d362e4a98754adf6ee604acb # v0.2.62
         with:
           report-type: annotations
 
