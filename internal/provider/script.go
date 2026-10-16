@@ -30,15 +30,21 @@ var (
 // defaultCommandsKey is the key in the os_commands map for the default commands.
 const defaultCommandsKey = "default"
 
-// NewScriptResource creates a new resource resource.
+// NewScriptResource creates a new script resource.
 func NewScriptResource() resource.Resource {
 	return &ScriptResource{}
+}
+
+// NewSensitiveScriptResource creates a new script resource with its output marked as sensitive.
+func NewSensitiveScriptResource() resource.Resource {
+	return &ScriptResource{sensitive: true}
 }
 
 // ScriptResource defines the resource implementation.
 type ScriptResource struct {
 	providerData *ShellProviderData
 	runner       script.CommandRunner
+	sensitive    bool
 }
 
 // ScriptResourceModel describes the resource data model.
@@ -70,14 +76,26 @@ type CommandModel struct {
 
 // Metadata returns the resource metadata.
 func (r *ScriptResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	if r.sensitive {
+		resp.TypeName = fmt.Sprintf("%s_sensitive_script", req.ProviderTypeName)
+		return
+	}
+
 	resp.TypeName = fmt.Sprintf("%s_script", req.ProviderTypeName)
 }
 
 // Schema returns the resource schema.
 func (r *ScriptResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+	description := "The Shell script resource runs configured commands during the Terraform lifecycle."
+	markdownDescription := "The _Shell_ script resource (`shell_script`) runs configured commands during the _Terraform_ lifecycle."
+	if r.sensitive {
+		description = "The Shell sensitive script resource runs configured commands during the Terraform lifecycle and marks its output as sensitive."
+		markdownDescription = "The _Shell_ sensitive script resource (`shell_sensitive_script`) runs configured commands during the _Terraform_ lifecycle; it behaves the same as `shell_script` except that `output` is marked as sensitive."
+	}
+
 	resp.Schema = schema.Schema{
-		Description:         "The Shell script resource runs configured commands during the Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script resource (`shell_script`) runs configured commands during the _Terraform_ lifecycle.",
+		Description:         description,
+		MarkdownDescription: markdownDescription,
 		Attributes: map[string]schema.Attribute{
 			"environment": schema.MapAttribute{
 				Description:         "The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.",
@@ -198,6 +216,7 @@ func (r *ScriptResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 				Description:         "The output of the script as a structured type.",
 				MarkdownDescription: "The JSON output from plan, create, read, or update as a structured type. The prior value is available to plan (when prior state exists), read, update, and delete commands as JSON via `TF_SCRIPT_STATE_OUTPUT`. A top-level `__meta` key is reserved for provider metadata and is removed from output.",
 				Computed:            true,
+				Sensitive:           r.sensitive,
 			},
 			"output_drift": schema.BoolAttribute{
 				Description:         "If the output has drifted and needs reconciling.",

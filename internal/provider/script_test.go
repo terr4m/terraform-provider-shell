@@ -68,7 +68,58 @@ resource "shell_script" "test" {
 		})
 	})
 
-	t.Run("create_with_os", func(t *testing.T) {
+	t.Run("create_sensitive", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := `printf '{"secret": "s3cr3t"}' > "$${TF_SCRIPT_OUTPUT}"`
+		if runtime.GOOS == "windows" {
+			cmd = `'{"secret": "s3cr3t"}' | Out-File -FilePath $env:TF_SCRIPT_OUTPUT -Encoding utf8`
+		}
+
+		resource.Test(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				{
+					Config: fmt.Sprintf(`
+resource "shell_sensitive_script" "test" {
+  os_commands = {
+    default = {
+      create = {
+        command = <<-EOF
+          %s
+        EOF
+      }
+      read = {
+        command = <<-EOF
+          %[1]s
+        EOF
+      }
+      update = {
+        command = <<-EOF
+          %[1]s
+        EOF
+      }
+      delete = {
+        command = ""
+      }
+    }
+  }
+}
+`, cmd),
+					ConfigPlanChecks: resource.ConfigPlanChecks{
+						PreApply: []plancheck.PlanCheck{
+							plancheck.ExpectSensitiveValue("shell_sensitive_script.test", tfjsonpath.New("output")),
+						},
+					},
+					ConfigStateChecks: []statecheck.StateCheck{
+						statecheck.ExpectKnownValue("shell_sensitive_script.test", tfjsonpath.New("output"), knownvalue.ObjectExact(map[string]knownvalue.Check{"secret": knownvalue.StringExact("s3cr3t")})),
+						statecheck.ExpectSensitiveValue("shell_sensitive_script.test", tfjsonpath.New("output")),
+					},
+				},
+			},
+		})
+	})
 		t.Parallel()
 
 		resource.Test(t, resource.TestCase{
