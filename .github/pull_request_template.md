@@ -27,14 +27,14 @@ Please check (replace the `[ ]` with `[x]`) the relevant options.
 
 ## Checklist
 
-- [ ] I have read the [CONTRIBUTING](https://github.com/terr4m/terraform-provider-github/blob/main/CONTRIBUTING.md) document
+- [ ] I have read the [CONTRIBUTING](https://github.com/terr4m/terraform-provider-shell/blob/main/.github/CONTRIBUTING.md) document
 - [ ] My code follows the idiomatic Go coding standards
 - [ ] I have performed a self-review of my own code
-- [ ] I have commented my code, particularly in hard-to-understand areas
+- [ ] I have added comments where they clarify non-obvious behavior
 - [ ] I have made corresponding changes to the documentation
 - [ ] My changes generate no new warnings
 - [ ] I have used table tests where appropriate
-- [ ] I have used google/go-cmp for test comparisons
+- [ ] I have used `google/go-cmp` where it makes test comparisons clearer
 - [ ] Any dependent changes have been merged and published
 
 ## Breaking Changes

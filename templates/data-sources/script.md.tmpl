@@ -9,16 +9,18 @@ description: |-
 
 {{ .Description | trimspace }}
 
+The command must write one valid JSON value to `TF_SCRIPT_OUTPUT` on every successful run; the provider parses it as `output`. Standard output is not used. Commands should be safe to repeat and return stable output for unchanged inputs and external data. Terraform may evaluate data sources during planning and refresh. A non-zero exit code includes text from `TF_SCRIPT_ERROR` in diagnostics.
+
 ## Environment Variables
 
-The following environment variables provide the shell script integration with the provider.
+The following environment variables provide the shell script integration with the provider. The interpreter and any required programs must be installed on the machine running Terraform. This example uses Bash, `curl`, and `jq` on non-Windows systems and PowerShell plus network access to `endoflife.date` on Windows. Use only trusted configurations; commands run with the Terraform process user and inherited environment. Avoid exposing secrets in inputs, outputs, or logs.
 
 | **Name** | **Description** |
 | :--- | :--- |
 | `TF_SCRIPT_LIFECYCLE` | The current lifecycle that triggered the script; this will always be `read`. |
 | `TF_SCRIPT_INPUTS` | The values passed into the data source `inputs` as JSON. |
-| `TF_SCRIPT_OUTPUT` | Path to the file where the script output must be written; the output must be valid JSON. |
-| `TF_SCRIPT_ERROR` | Path to a file which will be read as the error diagnostics if the scripts exits with a non-zero code. |
+| `TF_SCRIPT_OUTPUT` | Path where the command must write one valid JSON value. |
+| `TF_SCRIPT_ERROR` | Path to a file whose contents are included in error diagnostics when the command exits with a non-zero code. |
 
 {{ if .HasExample -}}
 ## Example Usage

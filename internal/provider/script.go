@@ -76,8 +76,8 @@ func (r *ScriptResource) Metadata(_ context.Context, req resource.MetadataReques
 // Schema returns the resource schema.
 func (r *ScriptResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description:         "The Shell script resource allows you to execute arbitrary commands as part of a Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script resource (`shell_script`) allows you to execute arbitrary commands as part of a _Terraform_ lifecycle. All commands must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If a script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.",
+		Description:         "The Shell script resource runs configured commands during the Terraform lifecycle.",
+		MarkdownDescription: "The _Shell_ script resource (`shell_script`) runs configured commands during the _Terraform_ lifecycle.",
 		Attributes: map[string]schema.Attribute{
 			"environment": schema.MapAttribute{
 				Description:         "The environment variables to set when executing commands; to be combined with the OS environment and the provider environment.",
@@ -96,13 +96,13 @@ func (r *ScriptResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 				Optional:            true,
 			},
 			"os_commands": schema.MapNestedAttribute{
-				Description:         "A map of commands to run as part of the Terraform lifecycle where the map key is the GOOS value or default; default must be provided.",
-				MarkdownDescription: "A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided.",
+				Description:         "Commands to run during the Terraform lifecycle, keyed by GOOS value or default; default is required.",
+				MarkdownDescription: "Commands to run during the Terraform lifecycle, keyed by `GOOS` value or `default`; `default` is required.",
 				Required:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"plan": schema.SingleNestedAttribute{
-							MarkdownDescription: "The plan command configuration, this can be used to customize the plan phase of the Terraform lifecycle.",
+							MarkdownDescription: "Optional command run during planning. It must write valid JSON to `TF_SCRIPT_OUTPUT`; that JSON becomes the planned `output`. A string value of `\"???\"` anywhere in plan output is treated as unknown and re-evaluated during apply, so this exact string cannot be represented as a known string output from the plan command.",
 							Optional:            true,
 							Attributes: map[string]schema.Attribute{
 								"interpreter": schema.ListAttribute{
@@ -196,12 +196,12 @@ func (r *ScriptResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 			},
 			"output": schema.DynamicAttribute{
 				Description:         "The output of the script as a structured type.",
-				MarkdownDescription: "The output of the script as a structured type; this can be accessed in the read, update and delete commands as JSON via the `TF_SCRIPT_STATE_OUTPUT` environment variable.",
+				MarkdownDescription: "The JSON output from plan, create, read, or update as a structured type. The prior value is available to plan (when prior state exists), read, update, and delete commands as JSON via `TF_SCRIPT_STATE_OUTPUT`. A top-level `__meta` key is reserved for provider metadata and is removed from output.",
 				Computed:            true,
 			},
 			"output_drift": schema.BoolAttribute{
 				Description:         "If the output has drifted and needs reconciling.",
-				MarkdownDescription: "If the output has drifted and needs reconciling.",
+				MarkdownDescription: "True when the read command reported `__meta.output_drift_detected = true`. This signals output drift; it does not by itself guarantee that an update command will repair the external object.",
 				Computed:            true,
 			},
 			"triggers": schema.DynamicAttribute{

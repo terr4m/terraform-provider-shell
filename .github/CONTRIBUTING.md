@@ -29,11 +29,10 @@ Before making significant changes, please **open an issue first** to discuss:
 
 ## Development Setup
 
-1. Fork the repository
-2. Clone your fork locally
-3. Install Go (version specified in `go.mod`)
-4. Install Terraform CLI
-5. Run `go mod tidy` to install dependencies
+1. Fork the repository and clone your fork.
+2. Install the Go version specified in `go.mod` and Terraform CLI. The acceptance tests use the locally installed Terraform binary and need no cloud credentials.
+3. Install `just` if you want to use the repository's task recipes. Install `golangci-lint` and `rumdl` to run the same Go and Markdown checks as CI.
+4. Download dependencies with `go mod download` (and run it in `tools/` before generating docs). Use `go mod tidy` only when changing dependencies, then review the resulting `go.mod` and `go.sum` changes.
 
 ## Making Changes
 
@@ -44,16 +43,23 @@ Before making significant changes, please **open an issue first** to discuss:
 5. Ensure all tests pass
 6. Commit your changes with clear, descriptive messages
 
-## Testing
+## Testing and validation
 
-- Run `go test ./...` to execute the test suite
-- Add unit tests for new functionality
-- Consider adding acceptance tests for new resources/data sources
-- Ensure your changes don't break existing functionality
+From the repository root:
+
+- `go test ./...` runs the Go test suite, including provider acceptance tests that exercise Terraform configurations and local scripts.
+- `go test -race ./...` runs tests with the race detector where supported.
+- `golangci-lint run --timeout=10m` runs the configured Go linters.
+- `golangci-lint fmt` formats Go code using the configured formatters.
+- `rumdl check .` checks Markdown.
+- `cd tools && go mod download && go generate ./...` formats Terraform examples and regenerates Registry documentation from the provider schemas, examples, and templates. Edit the relevant schema descriptions or files under `templates/`, then regenerate docs; do not hand-edit generated `docs/` pages. Review and commit generated changes when relevant.
+- `go build ./...` verifies that all packages build.
+
+Add or update unit and acceptance coverage for behavior changes. Before submitting, run the checks relevant to your changes and ensure generated documentation is current.
 
 ## Documentation
 
-- Update the relevant documentation for any new features
+- Update provider schema descriptions and/or documentation templates as appropriate, then regenerate Registry docs; do not hand-edit generated pages.
 - Ensure code comments are clear and helpful
 - Follow the existing documentation style and format
 
@@ -75,7 +81,7 @@ Before making significant changes, please **open an issue first** to discuss:
 ## Community Guidelines
 
 - Be respectful and constructive in all interactions
-- Follow the project's code of conduct
+- Follow the project's [Code of Conduct](https://github.com/terr4m/.github/blob/main/CODE_OF_CONDUCT.md).
 - Help others and share knowledge
 - Report any issues or concerns to maintainers
 

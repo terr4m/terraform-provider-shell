@@ -2,23 +2,25 @@
 page_title: "shell_script (Data Source) - terraform-provider-shell"
 subcategory: ""
 description: |-
-  The Shell script data source (shell_script) allows you to execute an arbitrary command as the read part of a Terraform lifecycle. The script must output a JSON string to the file defined by the TF_SCRIPT_OUTPUT environment variable and the file must be consistent on re-reading. If the script exits with a non-zero code the provider will ready any text from the file defined by the TF_SCRIPT_ERROR environment variable and return it as part of the error diagnostics.
+  The Shell script data source (shell_script) runs a command during Terraform reads.
 ---
 
 # shell_script (Data Source)
 
-The _Shell_ script data source (`shell_script`) allows you to execute an arbitrary command as the read part of a _Terraform_ lifecycle. The script must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If the script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.
+The _Shell_ script data source (`shell_script`) runs a command during _Terraform_ reads.
+
+The command must write one valid JSON value to `TF_SCRIPT_OUTPUT` on every successful run; the provider parses it as `output`. Standard output is not used. Commands should be safe to repeat and return stable output for unchanged inputs and external data. Terraform may evaluate data sources during planning and refresh. A non-zero exit code includes text from `TF_SCRIPT_ERROR` in diagnostics.
 
 ## Environment Variables
 
-The following environment variables provide the shell script integration with the provider.
+The following environment variables provide the shell script integration with the provider. The interpreter and any required programs must be installed on the machine running Terraform. This example uses Bash, `curl`, and `jq` on non-Windows systems and PowerShell plus network access to `endoflife.date` on Windows. Use only trusted configurations; commands run with the Terraform process user and inherited environment. Avoid exposing secrets in inputs, outputs, or logs.
 
 | **Name** | **Description** |
 | :--- | :--- |
 | `TF_SCRIPT_LIFECYCLE` | The current lifecycle that triggered the script; this will always be `read`. |
 | `TF_SCRIPT_INPUTS` | The values passed into the data source `inputs` as JSON. |
-| `TF_SCRIPT_OUTPUT` | Path to the file where the script output must be written; the output must be valid JSON. |
-| `TF_SCRIPT_ERROR` | Path to a file which will be read as the error diagnostics if the scripts exits with a non-zero code. |
+| `TF_SCRIPT_OUTPUT` | Path where the command must write one valid JSON value. |
+| `TF_SCRIPT_ERROR` | Path to a file whose contents are included in error diagnostics when the command exits with a non-zero code. |
 
 ## Example Usage
 
@@ -57,18 +59,18 @@ data "shell_script" "example" {
 
 ### Required
 
-- `os_commands` (Attributes Map) A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided. (see [below for nested schema](#nestedatt--os_commands))
+- `os_commands` (Attributes Map) Read commands keyed by `GOOS` value or `default`; `default` is required. (see [below for nested schema](#nestedatt--os_commands))
 
 ### Optional
 
-- `environment` (Map of String) The environment variables to set when executing command; to be combined with the OS environment and the provider environment.
-- `inputs` (Dynamic) Inputs to be made available to the script; these can be accessed as JSON via the `TF_SCRIPT_INPUTS` environment variable.
+- `environment` (Map of String) The environment variables to set when executing the command; combined with the OS and provider environments. Values are available to the script; avoid putting secrets here unless you understand their exposure.
+- `inputs` (Dynamic) Inputs to be made available to the script as JSON via `TF_SCRIPT_INPUTS`. Inputs may be persisted in Terraform state; do not pass secrets unless you understand the state and logging exposure.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 - `working_directory` (String) The working directory to use when executing the command; this will default to the _Terraform_ working directory.
 
 ### Read-Only
 
-- `output` (Dynamic) The output of the script as a structured type.
+- `output` (Dynamic) The valid JSON value written by the read command to `TF_SCRIPT_OUTPUT`, exposed as a structured type. Output may be persisted in Terraform state; avoid returning secrets unless you understand the state and logging exposure.
 
 <a id="nestedatt--os_commands"></a>
 ### Nested Schema for `os_commands`

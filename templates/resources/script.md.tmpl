@@ -9,17 +9,19 @@ description: |-
 
 {{ .Description | trimspace }}
 
+The `create`, `read`, and `update` commands must write one valid JSON value to `TF_SCRIPT_OUTPUT` on every successful run. The optional `plan` command must also write JSON when configured. Output is stored in Terraform state; the `read` command should return a consistent representation of current external state. If the object is removed externally, report it using `__meta.output_drift_detected = true`. A top-level `__meta` object is reserved and removed from `output`. The `delete` command does not return output. Non-zero command exits include text from `TF_SCRIPT_ERROR` in diagnostics.
+
 ## Environment Variables
 
 The following environment variables provide the shell script integration with the provider.
 
 | **Name** | **Description** |
 | :--- | :--- |
-| `TF_SCRIPT_LIFECYCLE` | The current lifecycle that triggered the script; this can be one of `create`, `read`, `update`, or `delete`. |
-| `TF_SCRIPT_INPUTS` | The values passed into the data source `inputs` as JSON. |
-| `TF_SCRIPT_OUTPUT` | Path to the file where the script output must be written; the output must be valid JSON. |
-| `TF_SCRIPT_ERROR` | Path to a file which will be read as the error diagnostics if the scripts exits with a non-zero code. |
-| `TF_SCRIPT_STATE_OUTPUT` | The current value of `output` in the state file, as JSON. |
+| `TF_SCRIPT_LIFECYCLE` | The current lifecycle stage: `plan`, `create`, `read`, `update`, or `delete`. |
+| `TF_SCRIPT_INPUTS` | The values passed into the resource `inputs` as JSON. |
+| `TF_SCRIPT_OUTPUT` | Path where `create`, `read`, and `update` must write valid JSON. A configured `plan` command must also write JSON when it runs. `delete` output is ignored. |
+| `TF_SCRIPT_ERROR` | Path to a file whose contents are included in error diagnostics when a command exits with a non-zero code. |
+| `TF_SCRIPT_STATE_OUTPUT` | The prior `output` value as JSON, available to `read`, `update`, and `delete`; also available to `plan` when prior state exists. |
 
 ## Capabilities
 
@@ -27,27 +29,33 @@ This resource supports the following capabilities to bring script functionality 
 
 ### JSON Inputs
 
-Scripts receive input parameters as JSON via the `TF_SCRIPT_INPUTS` environment variable, simplifying data handling.
+Scripts receive input parameters as JSON via the `TF_SCRIPT_INPUTS` environment variable, simplifying data handling. Inputs may be stored in Terraform state; do not pass secrets unless you understand the state and logging exposure.
 
 ### JSON Outputs
 
-Scripts must write their output as JSON to the file specified by the `TF_SCRIPT_OUTPUT` environment variable, ensuring structured data exchange. There is a special `__meta` key that can be used to provide additional metadata back to the provider.
+The `plan`, `create`, `read`, and `update` commands must write one valid JSON value to the file specified by `TF_SCRIPT_OUTPUT` on every successful run. The provider parses that value as the resource's `output`; stdout is not used as output. The `delete` command does not need to write `TF_SCRIPT_OUTPUT`, and the provider ignores any output it writes.
+
+A top-level `__meta` object is reserved for provider metadata and is removed before the remaining JSON becomes `output`. See [Output Drift Detection](#output-drift-detection).
 
 ### Plan Customization
 
-Scripts can customize the plan phase of the Terraform lifecycle by providing a plan command configuration, allowing for more dynamic resource management. If the plan returns a `"???"` value for any `output` key this will be treated as a dynamic value that requires re-evaluation during the apply phase. This allows scripts to signal that certain outputs cannot be determined until the resource is actually created or updated.
+Each OS command configuration can provide an optional `plan` command. When configured, Terraform runs it during planning and uses its JSON output as the planned `output`. It receives `TF_SCRIPT_LIFECYCLE=plan`, `TF_SCRIPT_INPUTS`, and (when prior state is available) `TF_SCRIPT_STATE_OUTPUT`. Without a plan command, the provider leaves output planning to Terraform, except that detected output drift makes `output` unknown.
+
+A string value of `"???"` anywhere in plan output is interpreted as unknown and re-evaluated during apply. This exact string cannot be represented as a known output string from the plan command.
 
 ### Output Drift Detection
 
-If an update is required to correct the state of the `output` values, the read script can set the `output.__meta.output_drift_detected` key to `true`. This will allow the provider to set the `output_drift` attribute to `true` and trigger an update during the next apply.
+If an external change means the resource needs reconciliation, the `read` command can include a top-level `__meta` object with `"output_drift_detected": true`, for example `{"exists": false, "__meta": {"output_drift_detected": true}}`. The provider removes `__meta` from stored `output` and sets the computed `output_drift` attribute to `true`. At the next plan, a configured plan command calculates output; without one, the provider marks `output` unknown. `output_drift` does not itself guarantee that an update command will repair the external object; implement repair in your plan/create/update commands.
 
 ### State Awareness
 
-Scripts can access the current state output via the `TF_SCRIPT_STATE_OUTPUT` environment variable, allowing for more informed operations during updates or deletions.
+The `read`, `update`, and `delete` commands can access the prior `output` as JSON via `TF_SCRIPT_STATE_OUTPUT`. A configured `plan` command also receives it when prior state is available.
 
 ### Lifecycle Awareness
 
 By inspecting the `TF_SCRIPT_LIFECYCLE` environment variable, scripts can adapt their behavior based on the current lifecycle phase.
+
+Commands execute on the machine running Terraform, as the Terraform process user, with its inherited environment and filesystem access. The default interpreter is `/bin/bash -c` on non-Windows systems and `pwsh -c` on Windows; command configurations can override it. Required interpreters and utilities must be installed on that machine. The examples use Bash, `jq`, temporary files, or PowerShell as appropriate and may need adaptation. Treat command strings as executable code and use only trusted configurations and script sources. Inputs and outputs may be persisted in Terraform state; avoid putting secrets in them or in logged output unless their exposure is understood. Provider `log_output` sends lines with recognized level prefixes to Terraform logs. Optional plan commands execute during planning.
 
 {{ if .HasExample -}}
 ## Example Usage
