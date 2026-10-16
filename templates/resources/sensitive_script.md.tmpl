@@ -1,0 +1,28 @@
+---
+page_title: "{{.Name}} ({{.Type}}) - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+This resource supports the same configuration, environment variables, and capabilities as [`shell_script`](./script.md). The only difference is that the `output` attribute is marked as sensitive, so _Terraform_ redacts it in plan and apply output and any value derived from it is also treated as sensitive. Sensitive values are still stored in plain text in _Terraform_ state, so the state must be protected accordingly. Avoid writing secrets to stdout/stderr when provider `log_output` is enabled, as logged lines are not redacted.
+
+{{ if .HasExample -}}
+## Example Usage
+
+{{tffile .ExampleFile }}
+{{- end }}
+
+{{ .SchemaMarkdown | trimspace }}
+{{- if .HasImport -}}
+
+## Import
+
+Import is supported using the following syntax:
+
+{{codefile "shell" .ImportFile }}
+{{- end }}

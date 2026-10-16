@@ -176,5 +176,6 @@ func (p *ShellProvider) Functions(_ context.Context) []func() function.Function 
 func (p *ShellProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewScriptResource,
+		NewSensitiveScriptResource,
 	}
 }
