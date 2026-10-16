@@ -22,6 +22,7 @@ lint:
 test:
     go test -v -cover -timeout=120s -parallel=10 ./...
 
+[env("TF_ACC", "1")]
 testacc:
     go test -v -cover -timeout 120m ./...
 
