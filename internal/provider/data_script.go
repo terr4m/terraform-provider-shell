@@ -58,12 +58,12 @@ func (d *ScriptDataSource) Metadata(_ context.Context, req datasource.MetadataRe
 // Schema returns the data source schema.
 func (d *ScriptDataSource) Schema(ctx context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description:         "The Shell script data source allows you to execute an arbitrary command as the read part of a Terraform lifecycle.",
-		MarkdownDescription: "The _Shell_ script data source (`shell_script`) allows you to execute an arbitrary command as the read part of a _Terraform_ lifecycle. The script must output a JSON string to the file defined by the `TF_SCRIPT_OUTPUT` environment variable and the file must be consistent on re-reading. If the script exits with a non-zero code the provider will ready any text from the file defined by the `TF_SCRIPT_ERROR` environment variable and return it as part of the error diagnostics.",
+		Description:         "The Shell script data source runs a command during Terraform reads.",
+		MarkdownDescription: "The _Shell_ script data source (`shell_script`) runs a command during _Terraform_ reads.",
 		Attributes: map[string]schema.Attribute{
 			"environment": schema.MapAttribute{
 				Description:         "The environment variables to set when executing command; to be combined with the OS environment and the provider environment.",
-				MarkdownDescription: "The environment variables to set when executing command; to be combined with the OS environment and the provider environment.",
+				MarkdownDescription: "The environment variables to set when executing the command; combined with the OS and provider environments. Values are available to the script; avoid putting secrets here unless you understand their exposure.",
 				ElementType:         types.StringType,
 				Optional:            true,
 			},
@@ -74,12 +74,12 @@ func (d *ScriptDataSource) Schema(ctx context.Context, _ datasource.SchemaReques
 			},
 			"inputs": schema.DynamicAttribute{
 				Description:         "Inputs to be made available to the script.",
-				MarkdownDescription: "Inputs to be made available to the script; these can be accessed as JSON via the `TF_SCRIPT_INPUTS` environment variable.",
+				MarkdownDescription: "Inputs to be made available to the script as JSON via `TF_SCRIPT_INPUTS`. Inputs may be persisted in Terraform state; do not pass secrets unless you understand the state and logging exposure.",
 				Optional:            true,
 			},
 			"os_commands": schema.MapNestedAttribute{
-				Description:         "A map of commands to run as part of the Terraform lifecycle where the map key is the GOOS value or default; default must be provided.",
-				MarkdownDescription: "A map of commands to run as part of the Terraform lifecycle where the map key is the `GOOS` value or `default`; `default` must be provided.",
+				Description:         "Read commands keyed by GOOS value or default; default is required.",
+				MarkdownDescription: "Read commands keyed by `GOOS` value or `default`; `default` is required.",
 				Required:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -106,7 +106,7 @@ func (d *ScriptDataSource) Schema(ctx context.Context, _ datasource.SchemaReques
 			},
 			"output": schema.DynamicAttribute{
 				Description:         "The output of the script as a structured type.",
-				MarkdownDescription: "The output of the script as a structured type.",
+				MarkdownDescription: "The valid JSON value written by the read command to `TF_SCRIPT_OUTPUT`, exposed as a structured type. Output may be persisted in Terraform state; avoid returning secrets unless you understand the state and logging exposure.",
 				Computed:            true,
 			},
 			"timeouts": timeouts.Attributes(ctx, timeouts.Opts{

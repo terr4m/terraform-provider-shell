@@ -1,4 +1,5 @@
-set windows-shell := ["pwsh", "-NoLogo", "-NoProfile", "-Command"]
+[windows]
+set shell := ["pwsh", "-NoLogo", "-NoProfile", "-Command"]
 
 default:
     just --list

@@ -5,12 +5,46 @@
 ![Release](https://github.com/terr4m/terraform-provider-shell/actions/workflows/release.yaml/badge.svg)
 ![Validate](https://github.com/terr4m/terraform-provider-shell/actions/workflows/validate.yaml/badge.svg?branch=main)
 
-This _Terraform_ provider allows you to run shell commands as part of your _Terraform_ configuration and can be found on the _Terraform_ registry at [terr4m/shell](https://registry.terraform.io/providers/terr4m/shell/latest).
+This _Terraform_ provider runs configured shell commands as part of a Terraform configuration. It provides a script resource and data source for integrating with systems that do not have a native provider. The provider is published on the [Terraform Registry](https://registry.terraform.io/providers/terr4m/shell/latest).
 
-## Usage
+## Quick start
 
-For full documentation on how to use this provider, please see the [Terraform Registry](https://registry.terraform.io/providers/terr4m/shell/latest/docs).
+Declare the provider and a version constraint in your Terraform configuration:
+
+```terraform
+terraform {
+  required_providers {
+    shell = {
+      source  = "terr4m/shell"
+      version = "~> 1.0"
+    }
+  }
+}
+
+provider "shell" {}
+
+data "shell_script" "example" {
+  inputs = {
+    greeting = "hello"
+  }
+
+  os_commands = {
+    default = {
+      read = {
+        command = <<-EOF
+          printf '{"greeting":"%s"}' "$(jq --raw-output '.greeting' <<<"$${TF_SCRIPT_INPUTS}")" > "$${TF_SCRIPT_OUTPUT}"
+        EOF
+      }
+    }
+  }
+}
+```
+
+Run `terraform init` to install the provider. This example uses the default Bash interpreter and requires `jq` on the machine running Terraform. See the Registry docs for [provider configuration](https://registry.terraform.io/providers/terr4m/shell/latest/docs) and the complete [data source](https://registry.terraform.io/providers/terr4m/shell/latest/docs/data-sources/script) and [resource](https://registry.terraform.io/providers/terr4m/shell/latest/docs/resources/script) references.
+
+> [!WARNING]
+> This provider executes arbitrary configured commands on the machine running Terraform. Use only trusted scripts and configurations. Commands may run during planning, apply, refresh, and destroy. Inputs and outputs may be persisted in Terraform state; do not pass secrets through them unless you understand the state and logging exposure.
 
 ## Contributing
 
-Contributions are welcome in all forms including documentation and issues as well as code.
+Contributions are welcome, including documentation, issues, and code. See [CONTRIBUTING](.github/CONTRIBUTING.md) for development setup, tests, generation, and linting instructions.
